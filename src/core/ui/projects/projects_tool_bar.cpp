@@ -3,7 +3,6 @@
 #include <ui/design_system/design_system.h>
 
 #include <QAction>
-#include <QDebug>
 
 
 namespace Ui
@@ -13,11 +12,17 @@ ProjectsToolBar::ProjectsToolBar(QWidget* _parent)
     : AppBar(_parent)
 {
     QAction* menuAction = new QAction(this);
-    menuAction->setText("\uf35c");
+    menuAction->setText(u8"\U000f035c");
     addAction(menuAction);
-    connect(menuAction, &QAction::toggled, this, &ProjectsToolBar::menuPressed);
+    connect(menuAction, &QAction::triggered, this, &ProjectsToolBar::menuPressed);
 
+    updateTranslations();
     designSystemChangeEvent(nullptr);
+}
+
+void ProjectsToolBar::updateTranslations()
+{
+    actions().at(0)->setToolTip(tr("Show main menu"));
 }
 
 void ProjectsToolBar::designSystemChangeEvent(DesignSystemChangeEvent* _event)

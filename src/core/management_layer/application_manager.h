@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../core_global.h"
+#include <core_global.h>
 
 #include <interfaces/management_layer/i_application_manager.h>
 
@@ -13,7 +13,7 @@ namespace ManagementLayer
 /**
  * @brief Менеджер приложения
  */
-class CORE_LIBRARY_EXPORT ApplicationManager : public QObject, IApplicationManager
+class CORE_PLUGIN_EXPORT ApplicationManager : public QObject, IApplicationManager
 {
     Q_OBJECT
     Q_PLUGIN_METADATA(IID "app.starc.ManagementLayer.IApplicationManager")
@@ -26,7 +26,12 @@ public:
     /**
      * @brief Запуск приложения
      */
-    void exec() final;
+    void exec(const QString& _fileToOpenPath) override final;
+
+    /**
+     * @brief Открытие файла
+     */
+    void openProject(const QString& _path) override final;
 
 protected:
     /**

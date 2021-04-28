@@ -5,11 +5,10 @@
 #-------------------------------------------------
 
 TEMPLATE = app
-
-CONFIG += c++11
-QT += core gui widgets
-
 TARGET = starcapp
+
+CONFIG += c++1z
+QT += core gui widgets
 
 DEFINES += QT_DEPRECATED_WARNINGS
 
@@ -17,12 +16,17 @@ DESTDIR = ../_build/
 
 INCLUDEPATH += ..
 
+LIBS += -L$$DESTDIR
+
 SOURCES += \
+        application.cpp \
         main.cpp
 
-HEADERS +=
+HEADERS += \
+    application.h
 
-# Default rules for deployment.
-qnx: target.path = /tmp/$${TARGET}/bin
-else: unix:!android: target.path = /opt/$${TARGET}/bin
-!isEmpty(target.path): INSTALLS += target
+win32:RC_FILE = app.rc
+macx {
+    ICON = icon.icns
+    QMAKE_INFO_PLIST = Info.plist
+}

@@ -24,7 +24,12 @@ signals:
 
 protected:
     /**
-     * @brief Обновляем навигатор при изменении дизайн системы
+     * @brief Обновить переводы
+     */
+    void updateTranslations() override;
+
+    /**
+     * @brief Обновляем виджет при изменении дизайн системы
      */
     void designSystemChangeEvent(DesignSystemChangeEvent* _event) override;
 };

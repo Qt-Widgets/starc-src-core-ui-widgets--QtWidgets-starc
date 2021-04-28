@@ -32,6 +32,11 @@ public:
      */
     void showContent(QWidget* _toolbar, QWidget* _navigator, QWidget* _view);
 
+    /**
+     * @brief Установить панель инструментов для работы с аккаунтом
+     */
+    void setAccountBar(Widget* _accountBar);
+
 signals:
     /**
      * @brief Запрос на закрытие приложения
@@ -40,11 +45,14 @@ signals:
 
 protected:
     /**
+     * @brief Корректируем расположение виджета личного кабинета внутри виджета представления
+     */
+    bool eventFilter(QObject* _target, QEvent* _event) override;
+
+    /**
      * @brief Переопределяем, чтобы вместо реального закрытия испустить сигнал о данном намерении
      */
     void closeEvent(QCloseEvent* _event) override;
-
-    void resizeEvent(QResizeEvent* _event) override;
 
     /**
      * @brief Обновляем навигатор при изменении дизайн системы
