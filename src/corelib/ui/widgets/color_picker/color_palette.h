@@ -15,6 +15,11 @@ public:
     ~ColorPallete() override;
 
     /**
+     * @brief Задать возможность удаления выбранного цвета, если выбрать его ещё раз
+     */
+    void setColorCanBeDeselected(bool _can);
+
+    /**
      * @brief Текущий выбранный цвет
      */
     QColor selectedColor() const;
@@ -23,7 +28,7 @@ public:
     /**
      * @brief Добавить кастомный цвет
      */
-    void addCustormColor(const QColor& _color);
+    void addCustomColor(const QColor& _color);
 
     /**
      * @brief Сами определяем идеальный размер для виджета
@@ -34,7 +39,7 @@ signals:
     /**
      * @brief Пользователь выбрал цвет
      */
-    void colorSelected(const QColor& _color);
+    void selectedColorChanged(const QColor& _color);
 
     /**
      * @brief Пользователь хочет добавить кастомный цвет
@@ -60,7 +65,7 @@ protected:
     /**
      * @brief При изменении дизайн системы, нужно перестроить палитру
      */
-    void designSystemChangeEvent(DesignSystemChangeEvent *_event) override;
+    void designSystemChangeEvent(DesignSystemChangeEvent* _event) override;
 
 private:
     class Implementation;

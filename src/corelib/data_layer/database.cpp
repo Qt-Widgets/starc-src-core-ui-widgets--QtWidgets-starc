@@ -46,28 +46,11 @@ static int s_openedTransactions = 0;
  */
 static QString applicationVersionKey()
 {
-    return
-#ifdef MOBILE_OS
-        "application-version-mobile";
-#else
-        "application-version";
-#endif
-}
-/**
- * @brief Инвертированный ключ хранения номера версии, для проверок
- */
-static QString invertedApplicationVersionKey()
-{
-    return
-#ifdef MOBILE_OS
-        "application-version";
-#else
-        "application-version-mobile";
-#endif
+    return "application-version";
 }
 } // namespace
 
-bool Database::canOpenFile(const QString &_databaseFileName)
+bool Database::canOpenFile(const QString& _databaseFileName)
 {
     bool canOpen = true;
 
@@ -87,9 +70,9 @@ bool Database::canOpenFile(const QString &_databaseFileName)
             && q_checker.value("value").toString().split(" ").first()
                 > QApplication::applicationVersion()) {
             canOpen = false;
-            s_openFileError
-                = QApplication::translate("DatabaseLayer::Database",
-                        "Project was modified in a newer version. Update to the latest version to open it.");
+            s_openFileError = QApplication::translate("DatabaseLayer::Database",
+                                                      "Project was modified in a newer version. "
+                                                      "Update to the latest version to open it.");
         }
     }
 
@@ -113,14 +96,14 @@ QString Database::lastError()
     return s_lastError;
 }
 
-void Database::setLastError(const QString &_error)
+void Database::setLastError(const QString& _error)
 {
     if (s_lastError != _error) {
         s_lastError = _error;
     }
 }
 
-void Database::setCurrentFile(const QString &_databaseFileName)
+void Database::setCurrentFile(const QString& _databaseFileName)
 {
     //
     // Если использовалась база данных, то удалим старое соединение
@@ -203,8 +186,8 @@ QSqlDatabase Database::instanse()
     return database;
 }
 
-void Database::open(QSqlDatabase &_database, const QString &_connectionName,
-                    const QString &_databaseName)
+void Database::open(QSqlDatabase& _database, const QString& _connectionName,
+                    const QString& _databaseName)
 {
     s_lastError.clear();
 
@@ -231,7 +214,7 @@ void Database::open(QSqlDatabase &_database, const QString &_connectionName,
 // - БД имеет старую версию
 // - БД имеет последнюю версию
 // - и т.д.
-Database::States Database::checkState(QSqlDatabase &_database)
+Database::States Database::checkState(QSqlDatabase& _database)
 {
     QSqlQuery q_checker(_database);
     Database::States states = Database::EmptyFlag;
@@ -274,7 +257,7 @@ Database::States Database::checkState(QSqlDatabase &_database)
     return states;
 }
 
-void Database::createTables(QSqlDatabase &_database)
+void Database::createTables(QSqlDatabase& _database)
 {
     QSqlQuery query(_database);
     _database.transaction();
@@ -283,10 +266,10 @@ void Database::createTables(QSqlDatabase &_database)
     // Таблица системных переменных
     //
     query.exec("CREATE TABLE system_variables "
-               "( "
-               "variable TEXT NOT NULL, "
+               "("
+               "variable TEXT PRIMARY KEY ON CONFLICT REPLACE, "
                "value TEXT NOT NULL "
-               "); ");
+               ");");
 
     //
     // Таблица с документами
@@ -311,13 +294,14 @@ void Database::createTables(QSqlDatabase &_database)
                "redo_patch BLOB NOT NULL, " // повтор изменения
                "date_time TEXT NOT NULL, " // yyyy.mm.dd.hh.mm.ss.zzz
                "user_name TEXT NOT NULL, "
-               "user_email TEXT DEFAULT(NULL) "
+               "user_email TEXT DEFAULT(NULL), "
+               "is_synced INTEGER NOT NULL DEFAULT(0) "
                ")");
 
     _database.commit();
 }
 
-void Database::createIndexes(QSqlDatabase &_database)
+void Database::createIndexes(QSqlDatabase& _database)
 {
     QSqlQuery query(_database);
     _database.transaction();
@@ -333,12 +317,12 @@ void Database::createIndexes(QSqlDatabase &_database)
     _database.commit();
 }
 
-void Database::createEnums(QSqlDatabase &_database)
+void Database::createEnums(QSqlDatabase& _database)
 {
     Q_UNUSED(_database)
 }
 
-void Database::updateDatabase(QSqlDatabase &_database)
+void Database::updateDatabase(QSqlDatabase& _database)
 {
     QSqlQuery query(_database);
 
@@ -349,16 +333,7 @@ void Database::updateDatabase(QSqlDatabase &_database)
     query.addBindValue(applicationVersionKey());
     query.exec();
     query.next();
-    QString databaseVersion = query.record().value("version").toString();
-    //
-    // ... если версии нет (файл пришёл из другой версии мобильная <-> десктоп), то создадим её
-    //
-    if (databaseVersion.isEmpty()) {
-        query.addBindValue(invertedApplicationVersionKey());
-        query.exec();
-        query.next();
-        databaseVersion = query.record().value("version").toString();
-    }
+    const auto databaseVersion = query.record().value("version").toString();
 
     //
     // Некоторые версии выходили с ошибками, их заменяем на предыдущие
@@ -368,10 +343,10 @@ void Database::updateDatabase(QSqlDatabase &_database)
         //            databaseVersion = "Y.Y.Y";
         //        }
     }
-    const QStringList &versionParts = databaseVersion.split(".");
+    const QStringList& versionParts = databaseVersion.split(".");
     const int versionMajor = versionParts.value(0, "0").toInt();
     const int versionMinor = versionParts.value(1, "0").toInt();
-    const int versionBuild = versionParts.value(2, "1").split(" ").value(0, "1").toInt();
+    const int versionBuild = versionParts.value(2, "1").toInt();
 
     //
     // Вызываются необходимые процедуры обновления БД в зависимости от её версии
@@ -382,20 +357,34 @@ void Database::updateDatabase(QSqlDatabase &_database)
         //
         // 0.0.X
         //
-        if (versionMinor <= 0) {
-            if (versionMinor < 0 || versionBuild <= 1) {
-                //                updateDatabaseTo_0_0_2(_database);
-            }
-            if (versionMinor < 0 || versionBuild <= 4) {
-                //                updateDatabaseTo_0_0_5(_database);
+        if (versionMajor < 0 || versionMinor <= 0) {
+            //
+            // 0.0.9
+            //
+            if (versionMajor < 0 || versionMinor < 0 || versionBuild <= 9) {
+                updateDatabaseTo_0_0_10(_database);
             }
         }
         //
         // 0.1.X
         //
-        if (versionMinor <= 1) {
-            if (versionMinor < 1 || versionBuild <= 0) {
-                //                updateDatabaseTo_0_1_0(_database);
+        if (versionMajor < 0 || versionMinor <= 1) {
+            //
+            // 0.1.2
+            //
+            if (versionMajor < 0 || versionMinor < 1 || versionBuild <= 2) {
+                updateDatabaseTo_0_1_3(_database);
+            }
+        }
+        //
+        // 0.2.x
+        //
+        if (versionMajor < 0 || versionMinor <= 2) {
+            //
+            // 0.2.3
+            //
+            if (versionMajor < 0 || versionMinor < 2 || versionBuild <= 3) {
+                updateDatabaseTo_0_2_4(_database);
             }
         }
     }
@@ -414,6 +403,124 @@ void Database::updateDatabase(QSqlDatabase &_database)
     query.exec(QString("INSERT INTO system_variables VALUES ('%1', '%2')")
                    .arg(applicationVersionKey())
                    .arg(QApplication::applicationVersion()));
+}
+
+void Database::updateDatabaseTo_0_0_10(QSqlDatabase& _database)
+{
+    //
+    // В структуре хранились кривые цвета элементов проекта, поэтому удаляем их
+    //
+
+    QSqlQuery q_updater(_database);
+
+    _database.transaction();
+
+    {
+        //
+        // Извлекаем структуру проекта
+        //
+        q_updater.exec("SELECT content FROM documents WHERE type = 1");
+        QString structure;
+        if (q_updater.next()) {
+            structure = q_updater.record().value("content").toString();
+        }
+        //
+        // ... удаляем цвета
+        //
+        structure = structure.remove("#000000");
+        //
+        // ... обновим данные
+        //
+        q_updater.prepare("UPDATE documents SET content = ? WHERE type = 1");
+        q_updater.addBindValue(structure);
+        q_updater.exec();
+    }
+
+    _database.commit();
+}
+
+void Database::updateDatabaseTo_0_1_3(QSqlDatabase& _database)
+{
+    QSqlQuery q_updater(_database);
+
+    _database.transaction();
+
+    //
+    // Изменить в комиксах блоки page_name & panel_name на page_heading & panel_heading
+    //
+
+    {
+        //
+        // Извлекаем документы комиксов
+        //
+        std::map<QString, QString> comicBooks;
+        q_updater.exec("SELECT id, content FROM documents WHERE type = 10203");
+        while (q_updater.next()) {
+            comicBooks[q_updater.record().value("id").toString()]
+                = q_updater.record()
+                      .value("content")
+                      .toString()
+                      .replace("page_name", "page_heading")
+                      .replace("panel_name", "panel_heading");
+        }
+
+        //
+        // Обновим данные
+        //
+        for (const auto& [id, content] : comicBooks) {
+            q_updater.prepare("UPDATE documents SET content = ? WHERE id = ?");
+            q_updater.addBindValue(content);
+            q_updater.addBindValue(id);
+            q_updater.exec();
+        }
+    }
+
+    //
+    // Изменить в сценариях элементы
+    // folder_header -> sequence_heading
+    // folder_footer -> sequence_footer
+    // folder -> sequence
+    //
+
+    {
+        //
+        // Извлекаем документы комиксов
+        //
+        std::map<QString, QString> comicBooks;
+        q_updater.exec("SELECT id, content FROM documents WHERE type = 10104");
+        while (q_updater.next()) {
+            comicBooks[q_updater.record().value("id").toString()]
+                = q_updater.record()
+                      .value("content")
+                      .toString()
+                      .replace("folder_header", "sequence_heading")
+                      .replace("folder_footer", "sequence_footer")
+                      .replace("folder", "sequence");
+        }
+
+        //
+        // Обновим данные
+        //
+        for (const auto& [id, content] : comicBooks) {
+            q_updater.prepare("UPDATE documents SET content = ? WHERE id = ?");
+            q_updater.addBindValue(content);
+            q_updater.addBindValue(id);
+            q_updater.exec();
+        }
+    }
+
+    _database.commit();
+}
+
+void Database::updateDatabaseTo_0_2_4(QSqlDatabase& _database)
+{
+    QSqlQuery q_updater(_database);
+
+    _database.transaction();
+
+    q_updater.exec("ALTER TABLE documents_changes ADD is_synced INTEGER NOT NULL DEFAULT(0)");
+
+    _database.commit();
 }
 
 } // namespace DatabaseLayer

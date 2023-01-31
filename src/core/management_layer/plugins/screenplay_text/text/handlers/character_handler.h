@@ -5,8 +5,7 @@
 class QStringListModel;
 
 
-namespace KeyProcessingLayer
-{
+namespace KeyProcessingLayer {
 
 /**
  * @brief Класс выполняющий обработку нажатия клавиш в блоке персонажа
@@ -28,6 +27,7 @@ protected:
     /** @{ */
     void handleEnter(QKeyEvent* _event = nullptr) override;
     void handleTab(QKeyEvent* _event = nullptr) override;
+    void handleBackspace(QKeyEvent* _event = 0) override;
     void handleOther(QKeyEvent* _event = nullptr) override;
     void handleInput(QInputMethodEvent* _event) override;
     /** @} */
@@ -48,6 +48,11 @@ private:
      * @brief Модель персонажей текущей сцены
      */
     QStringListModel* m_completerModel = nullptr;
+
+    /**
+     * @brief Можно ли показать подсказку
+     */
+    bool m_completionAllowed = true;
 };
 
 } // namespace KeyProcessingLayer

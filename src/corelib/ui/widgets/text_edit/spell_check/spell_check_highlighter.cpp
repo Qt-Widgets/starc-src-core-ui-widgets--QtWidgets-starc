@@ -2,7 +2,14 @@
 
 #include "spell_checker.h"
 
+#include <QRegularExpression>
 #include <QTextDocument>
+#include <QTimer>
+
+
+namespace {
+const int kInvalidCursorPosition = -1;
+}
 
 
 class SpellCheckHighlighter::Implementation
@@ -27,7 +34,15 @@ public:
     /**
      * @brief Позиция курсора в блоке
      */
-    int cursorPosition = -1;
+    struct {
+        int inDocument = kInvalidCursorPosition;
+        int inBlock = kInvalidCursorPosition;
+    } cursorPosition;
+
+    /**
+     * @brief Таймер перепроверки текущего абзаца после изменения положения курсора
+     */
+    QTimer recheckTimer;
 };
 
 SpellCheckHighlighter::Implementation::Implementation(const SpellChecker& _checker)
@@ -38,6 +53,9 @@ SpellCheckHighlighter::Implementation::Implementation(const SpellChecker& _check
     //
     misspeledCharFormat.setUnderlineStyle(QTextCharFormat::WaveUnderline);
     misspeledCharFormat.setUnderlineColor(Qt::red);
+
+    recheckTimer.setInterval(1600);
+    recheckTimer.setSingleShot(true);
 }
 
 
@@ -45,16 +63,25 @@ SpellCheckHighlighter::Implementation::Implementation(const SpellChecker& _check
 
 
 SpellCheckHighlighter::SpellCheckHighlighter(QTextDocument* _parent, const SpellChecker& _checker)
-    : SyntaxHighlighter(_parent),
-      d(new Implementation(_checker))
+    : SyntaxHighlighter(_parent)
+    , d(new Implementation(_checker))
 {
+    connect(&d->recheckTimer, &QTimer::timeout, this, [this] {
+        if (d->cursorPosition.inDocument == kInvalidCursorPosition) {
+            return;
+        }
+
+        const auto blockToRecheck = document()->findBlock(d->cursorPosition.inDocument);
+        d->cursorPosition = {};
+        rehighlightBlock(blockToRecheck);
+    });
 }
 
 SpellCheckHighlighter::~SpellCheckHighlighter() = default;
 
 void SpellCheckHighlighter::setUseSpellChecker(bool _use)
 {
-    if (d->useSpellChecker == _use) {
+    if (d->useSpellChecker == _use || !d->spellChecker.isAvailable()) {
         return;
     }
 
@@ -75,7 +102,9 @@ bool SpellCheckHighlighter::useSpellChecker() const
 
 void SpellCheckHighlighter::setCursorPosition(int _position)
 {
-    d->cursorPosition = _position;
+    d->cursorPosition.inDocument = _position;
+    d->cursorPosition.inBlock = _position - document()->findBlock(_position).position();
+    d->recheckTimer.start();
 }
 
 void SpellCheckHighlighter::highlightBlock(const QString& _text)
@@ -91,20 +120,23 @@ void SpellCheckHighlighter::highlightBlock(const QString& _text)
     //
     // Убираем пустоты из проверяемого текста
     //
-    QRegExp notWord("[^\\w'’-]+");
-    notWord.indexIn(_text);
+    const static QRegularExpression notWord("([^\\w'’-]|·)+",
+                                            QRegularExpression::UseUnicodePropertiesOption);
     //
     // Проверяем каждое слово
     //
     int wordPos = 0;
-    int notWordPos = notWord.pos(0);
-    for (wordPos = 0; wordPos < _text.length(); wordPos = notWordPos + 1) {
+    int notWordLength = 1;
+    int notWordPos = 0;
+    for (wordPos = 0; wordPos < _text.length(); wordPos = notWordPos + notWordLength) {
         //
         // Получим окончание слова
         //
-        notWord.indexIn(_text, wordPos);
-        notWordPos = notWord.pos(0);
-        if (notWordPos == -1) {
+        const auto match = notWord.match(_text, wordPos);
+        if (match.hasMatch()) {
+            notWordPos = match.capturedStart();
+            notWordLength = std::max(1, match.capturedLength());
+        } else {
             notWordPos = _text.length();
         }
 
@@ -121,9 +153,8 @@ void SpellCheckHighlighter::highlightBlock(const QString& _text)
             //
             // Не проверяем слово, которое сейчас пишется
             //
-            if (isChanged()
-                && positionInText <= d->cursorPosition
-                && positionInText + wordToCheck.length() > d->cursorPosition) {
+            if (positionInText <= d->cursorPosition.inBlock
+                && positionInText + wordToCheck.length() > d->cursorPosition.inBlock) {
                 continue;
             }
 

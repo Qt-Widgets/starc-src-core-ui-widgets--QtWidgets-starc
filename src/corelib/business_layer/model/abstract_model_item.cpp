@@ -1,10 +1,11 @@
 #include "abstract_model_item.h"
 
+#include <utils/shugar.h>
+
 #include <QVector>
 
 
-namespace BusinessLayer
-{
+namespace BusinessLayer {
 
 class AbstractModelItem::Implementation
 {
@@ -30,55 +31,107 @@ AbstractModelItem::AbstractModelItem()
 {
 }
 
-AbstractModelItem::~AbstractModelItem() = default;
+AbstractModelItem::~AbstractModelItem()
+{
+    qDeleteAll(d->children);
+    d->children.clear();
+};
 
 void AbstractModelItem::prependItem(AbstractModelItem* _item)
 {
-    //
-    // Устанавливаем себя родителем
-    //
-    _item->d->parent = this;
+    prependItems({ _item });
+}
 
-    //
-    // Добавляем элемент в список детей
-    //
-    d->children.prepend(_item);
+void AbstractModelItem::prependItems(const QVector<AbstractModelItem*>& _items)
+{
+    for (auto item : _items) {
+        if (item->parent() == this) {
+            continue;
+        }
+
+        item->d->parent = this;
+        d->children.prepend(item);
+    }
+
+    setChanged(true);
 }
 
 void AbstractModelItem::appendItem(AbstractModelItem* _item)
 {
-    //
-    // Устанавливаем себя родителем
-    //
-    _item->d->parent = this;
+    appendItems({ _item });
+}
 
-    //
-    // Добавляем элемент в список детей
-    //
-    d->children.append(_item);
+void AbstractModelItem::appendItems(const QVector<AbstractModelItem*>& _items)
+{
+    for (auto item : _items) {
+        if (item->parent() == this) {
+            continue;
+        }
+
+        item->d->parent = this;
+        d->children.append(item);
+    }
+
+    setChanged(true);
 }
 
 void AbstractModelItem::insertItem(int _index, AbstractModelItem* _item)
 {
-    _item->d->parent = this;
-    d->children.insert(_index, _item);
+    insertItems(_index, { _item });
+}
+
+void AbstractModelItem::insertItems(int _index, const QVector<AbstractModelItem*>& _items)
+{
+    for (auto item : reversed(_items)) {
+        if (item->parent() == this) {
+            continue;
+        }
+
+        item->d->parent = this;
+        d->children.insert(_index, item);
+    }
 
     setChanged(true);
 }
 
 void AbstractModelItem::removeItem(AbstractModelItem* _item)
 {
-    d->children.removeOne(_item);
-    delete _item;
-    _item = nullptr;
+    const auto itemIndex = rowOfChild(_item);
+    removeItems(itemIndex, itemIndex);
+}
+
+void AbstractModelItem::removeItems(int _fromIndex, int _toIndex)
+{
+    for (int index = _toIndex; index >= _fromIndex; --index) {
+        if (d->children[index]->parent() != this) {
+            continue;
+        }
+
+        auto item = d->children[index];
+        d->children.removeAt(index);
+        delete item;
+        item = nullptr;
+    }
 
     setChanged(true);
 }
 
 void AbstractModelItem::takeItem(AbstractModelItem* _item)
 {
-    _item->setParent(nullptr);
-    d->children.removeOne(_item);
+    const auto itemIndex = rowOfChild(_item);
+    takeItems(itemIndex, itemIndex);
+}
+
+void AbstractModelItem::takeItems(int _fromIndex, int _toIndex)
+{
+    for (int index = _toIndex; index >= _fromIndex; --index) {
+        if (d->children[index]->parent() != this) {
+            continue;
+        }
+
+        d->children[index]->setParent(nullptr);
+        d->children.removeAt(index);
+    }
 
     setChanged(true);
 }
@@ -96,6 +149,19 @@ AbstractModelItem* AbstractModelItem::parent() const
 void AbstractModelItem::setParent(AbstractModelItem* _parent)
 {
     d->parent = _parent;
+}
+
+bool AbstractModelItem::isChildOf(AbstractModelItem* _parent) const
+{
+    auto parent = this->parent();
+    while (parent != nullptr) {
+        if (parent == _parent) {
+            return true;
+        }
+
+        parent = parent->parent();
+    }
+    return false;
 }
 
 bool AbstractModelItem::hasChildren() const
@@ -122,7 +188,7 @@ bool AbstractModelItem::hasChild(AbstractModelItem* _child, bool _recursively) c
         return true;
     }
 
-    for (auto child : d->children) {
+    for (auto child : std::as_const(d->children)) {
         if (child->hasChild(_child, _recursively)) {
             return true;
         }
@@ -150,12 +216,28 @@ void AbstractModelItem::setChanged(bool _changed)
 {
     d->changed = _changed;
 
-    if (_changed
-        && d->parent != nullptr) {
-        d->parent->setChanged(_changed);
-    }
+    if (_changed) {
+        //
+        // Сначала обрабатываем собственное изменение элемента
+        //
+        handleChange();
 
-    handleChange();
+        //
+        // А потом уже изменение его родителя, которое будет учитывать текущее изменение тоже
+        //
+        if (d->parent != nullptr) {
+            d->parent->setChanged(_changed);
+        }
+    }
+}
+
+bool AbstractModelItem::isFilterAccepted(const QString& _text, bool _isCaseSensitive,
+                                         int _filterType) const
+{
+    Q_UNUSED(_text)
+    Q_UNUSED(_isCaseSensitive)
+    Q_UNUSED(_filterType)
+    return false;
 }
 
 } // namespace BusinessLayer

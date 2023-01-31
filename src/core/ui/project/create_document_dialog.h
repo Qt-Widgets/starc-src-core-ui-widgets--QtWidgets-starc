@@ -4,11 +4,10 @@
 
 
 namespace Domain {
-    enum class DocumentObjectType;
+enum class DocumentObjectType;
 }
 
-namespace Ui
-{
+namespace Ui {
 
 /**
  * @brief Диалог создания нового документа в проекте
@@ -20,6 +19,26 @@ class CreateDocumentDialog : public AbstractDialog
 public:
     explicit CreateDocumentDialog(QWidget* _parent = nullptr);
     ~CreateDocumentDialog() override;
+
+    /**
+     * @brief Выбрать документ заданного типа
+     */
+    void setDocumentType(Domain::DocumentObjectType _type);
+
+    /**
+     * @brief Задать ошибку имени
+     */
+    void setNameError(const QString& _error);
+
+    /**
+     * @brief Установить возможность вставки элемента в родителя
+     */
+    void setInsertionParent(const QString& _parentName);
+
+    /**
+     * @brief Желает ли пользователь вставлять элемент в заданного родителя
+     */
+    bool needInsertIntoParent() const;
 
 signals:
     /**

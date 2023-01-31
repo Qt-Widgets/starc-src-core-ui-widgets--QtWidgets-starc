@@ -3,6 +3,7 @@
 #include <ui/widgets/widget/widget.h>
 
 class Button;
+class IconButton;
 class QGridLayout;
 
 
@@ -38,6 +39,11 @@ public:
     void setContentMaximumWidth(int _width);
 
     /**
+     * @brief Зафиксировать ширину контента диалога
+     */
+    void setContentFixedWidth(int _width);
+
+    /**
      * @brief Задать кнопку, для нажатия при нажатии Enter в диалоге
      */
     void setAcceptButton(Button* _button);
@@ -59,6 +65,11 @@ protected:
     void setTitle(const QString& _title);
 
     /**
+     * @brief Получить иконку заголовка
+     */
+    IconButton* titleIcon() const;
+
+    /**
      * @brief Получить компоновщик контента
      */
     QGridLayout* contentsLayout() const;
@@ -74,7 +85,8 @@ protected:
     virtual QWidget* lastFocusableWidget() const = 0;
 
     /**
-     * @brief Весим фильтр на родительский виджет, чтобы корректировать свои размеры в соответствии с ним
+     * @brief Весим фильтр на родительский виджет, чтобы корректировать свои размеры в соответствии
+     * с ним
      */
     bool eventFilter(QObject* _watched, QEvent* _event) override;
 
@@ -87,6 +99,11 @@ protected:
      * @brief Переопределяем отрисовку
      */
     void paintEvent(QPaintEvent* _event) override;
+
+    /**
+     * @brief Обрабатываем клики за пределами области контента диалога
+     */
+    void mousePressEvent(QMouseEvent* _event) override;
 
     /**
      * @brief Обновляем навигатор при изменении дизайн системы

@@ -1,16 +1,15 @@
 #pragma once
 
-#include <corelib_global.h>
-
 #include <QtGlobal>
+
+#include <corelib_global.h>
 
 class QString;
 class QSqlQuery;
 class QSqlDatabase;
 
 
-namespace DatabaseLayer
-{
+namespace DatabaseLayer {
 
 class CORE_LIBRARY_EXPORT Database
 {
@@ -91,16 +90,17 @@ private:
     /**
      * @brief Открыть соединение с базой данных
      */
-    static void open(QSqlDatabase& _database,
-            const QString& _connectionName,
-            const QString& _databaseName
-            );
+    static void open(QSqlDatabase& _database, const QString& _connectionName,
+                     const QString& _databaseName);
     static Database::States checkState(QSqlDatabase& _database);
     static void createTables(QSqlDatabase& _database);
     static void createIndexes(QSqlDatabase& _database);
     static void createEnums(QSqlDatabase& _database);
 
     static void updateDatabase(QSqlDatabase& _database);
+    static void updateDatabaseTo_0_0_10(QSqlDatabase& _database);
+    static void updateDatabaseTo_0_1_3(QSqlDatabase& _database);
+    static void updateDatabaseTo_0_2_4(QSqlDatabase& _database);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(Database::States)

@@ -2,9 +2,12 @@
 
 #include <ui/widgets/widget/widget.h>
 
+namespace Domain {
+struct AccountInfo;
+} // namespace Domain
 
-namespace Ui
-{
+
+namespace Ui {
 
 /**
  * @brief Навигатор личного кабинета
@@ -18,20 +21,41 @@ public:
     ~AccountNavigator() override;
 
     /**
-     * @brief Задать дату окончания подписки
+     * @brief Скорректировать интерфейс в зависимости от того есть ли подключение к серверу
      */
-    void setSubscriptionEnd(const QString& _subscriptionEnd);
+    void setConnected(bool _connected);
+
+    /**
+     * @brief Задать информацию о подписке
+     */
+    void setAccountInfo(const Domain::AccountInfo& _account);
 
 signals:
     /**
-     * @brief Пользователь хочет купить лицензию
+     * @brief Пользователь хочет перейти в отображению заданных настроек
      */
-    void upgradeToProPressed();
+    void accountPressed();
+    void subscriptionPressed();
+    void sessionsPressed();
 
     /**
-     * @brief Пользователь хочет продлить подписку
+     * @brief Пользователь хочет проапгрейдить аккаунт
      */
-    void renewSubscriptionPressed();
+    void tryProForFreePressed();
+    void buyProLifetimePressed();
+    void renewProPressed();
+    void tryTeamForFreePressed();
+    void renewTeamPressed();
+
+    /**
+     * @brief Пользователь нажал кнопку покупки кредитов
+     */
+    void buyCreditsPressed();
+
+    /**
+     * @brief Пользователь хочет выйти из личного кабинета
+     */
+    void logoutPressed();
 
 protected:
     /**
@@ -50,4 +74,3 @@ private:
 };
 
 } // namespace Ui
-

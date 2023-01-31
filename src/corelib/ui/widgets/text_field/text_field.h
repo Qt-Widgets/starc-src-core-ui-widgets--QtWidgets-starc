@@ -1,8 +1,6 @@
 #pragma once
 
-#include <corelib_global.h>
-
-#include <QTextEdit>
+#include <ui/widgets/text_edit/base/base_text_edit.h>
 
 class QValidator;
 
@@ -10,7 +8,7 @@ class QValidator;
 /**
  * @brief Виджет текстового поля
  */
-class CORE_LIBRARY_EXPORT TextField : public QTextEdit
+class CORE_LIBRARY_EXPORT TextField : public BaseTextEdit
 {
     Q_OBJECT
 
@@ -27,6 +25,7 @@ public:
      * @brief Цвет текста виджета
      */
     void setTextColor(const QColor& _color);
+    QColor textColor() const;
 
     /**
      * @brief Установить тект поясняющей метки
@@ -36,12 +35,15 @@ public:
     /**
      * @brief Установить текст впомогательной подсказки
      */
+    QString helper() const;
     void setHelper(const QString& _text);
 
     /**
-     * @brief Установить текст ошибки
+     * @brief Текст ошибки
      */
+    QString error() const;
     void setError(const QString& _text);
+    void clearError();
 
     /**
      * @brief Перекрываем собственной реализацией
@@ -65,9 +67,25 @@ public:
     void setText(const QString& _text);
 
     /**
+     * @brief Выделенный текст
+     */
+    QString selectedText() const;
+
+    /**
      * @brief Задать иконку действия в редакторе
      */
     void setTrailingIcon(const QString& _icon);
+
+    /**
+     * @brief Задать цвет иконки действия (по-умолчанию используется цвет текста)
+     */
+    void setTrailingIconColor(const QColor& _color);
+    QColor trailingIconColor() const;
+
+    /**
+     * @brief Задать всплывающую подсказку для иконки действия
+     */
+    void setTrailingIconToolTip(const QString& _toolTip);
 
     /**
      * @brief Включить/отключить режим ввода пароля
@@ -83,12 +101,14 @@ public:
     /**
      * @brief Установить видимость заголовка
      */
-    void setTitleVisible(bool _visible);
+    void setLabelVisible(bool _visible);
 
     /**
      * @brief Установить использование отступов по-умолчанию
      */
+    bool isDefaultMarginsEnabled() const;
     void setDefaultMarginsEnabled(bool _enable);
+    QMarginsF customMargins() const;
     void setCustomMargins(const QMarginsF& _margins);
 
     /**
@@ -110,18 +130,29 @@ public:
     int heightForWidth(int _width) const override;
     /** @} */
 
+    /**
+     * @brief Переопределяем, чтобы отлавливать событие контекстного меню вспомогательного действия
+     */
+    ContextMenu* createContextMenu(const QPoint& _position, QWidget* _parent = nullptr) override;
+
 signals:
+    /**
+     * @brief Был нажат энтер
+     * @note Сигнал срабатывает только в случае, когда @b setEnterMakesNewLine задан в @b true
+     */
+    void enterPressed();
+
     /**
      * @brief Была нажата иконка вспомогательного действия
      */
     void trailingIconPressed();
 
-protected:
     /**
-     * @brief Задать цвет иконки вспомогательного действия
+     * @brief Запрос на отображение контекстного меню вспомогательного действия
      */
-    void setTrailingIconColor(const QColor& _color);
+    void trailingIconContextMenuRequested();
 
+protected:
     /**
      * @brief Сконфигурировать виджет при изменении какого-либо из параметров внешнего вида
      */
@@ -153,6 +184,7 @@ protected:
     /**
      * @brief Переопределяем для обработки нажатия на иконке вспомогательного действия
      */
+    void mousePressEvent(QMouseEvent* _event) override;
     void mouseReleaseEvent(QMouseEvent* _event) override;
 
     /**
@@ -166,6 +198,11 @@ protected:
     void keyPressEvent(QKeyEvent* _event) override;
 
     /**
+     * @brief Ловим LayoutDirectionChanged
+     */
+    void changeEvent(QEvent* _event) override;
+
+    /**
      * @brief Разрешаем вставлять только плоский текст
      */
     void insertFromMimeData(const QMimeData* _source) override;
@@ -174,4 +211,3 @@ private:
     class Implementation;
     QScopedPointer<Implementation> d;
 };
-

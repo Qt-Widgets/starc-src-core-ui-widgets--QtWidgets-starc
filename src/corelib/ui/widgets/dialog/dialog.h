@@ -14,7 +14,7 @@ public:
     enum ButtonType {
         NormalButton,
         AcceptButton,
-        RejectButton
+        RejectButton,
     };
 
     /**
@@ -33,13 +33,14 @@ public:
     /**
      * @brief Показать диалог с заданными заголовком, описанием и списком кнопок
      */
-    void showDialog(const QString& _title, const QString& _supportingText, const QVector<ButtonInfo>& _buttons);
+    void showDialog(const QString& _title, const QString& _supportingText,
+                    const QVector<ButtonInfo>& _buttons, bool _placeButtonsSideBySide = true);
 
 signals:
     /**
      * @brief Диалог завершился с установленным выбором пользователя
      */
-    void finished(const ButtonInfo& _pressedButton);
+    void finished(const Dialog::ButtonInfo& _pressedButton);
 
 protected:
     /**

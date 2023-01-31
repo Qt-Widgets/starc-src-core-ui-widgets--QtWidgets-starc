@@ -1,20 +1,23 @@
 #pragma once
 
-#include <corelib_global.h>
+#include <business_layer/model/text/text_model_text_item.h>
 
 #include <QTextDocument>
 
+#include <corelib_global.h>
+
 
 namespace BusinessLayer {
-    class TextModel;
-    enum class TextParagraphType;
-}
+class TextModel;
+enum class TextParagraphType;
+} // namespace BusinessLayer
 
-namespace BusinessLayer
-{
+namespace BusinessLayer {
+class TextCursor;
+class AbstractTextCorrector;
 
 /**
- * @brief Класс текстового документа
+ * @brief Класс документа текста
  */
 class CORE_LIBRARY_EXPORT TextDocument : public QTextDocument
 {
@@ -25,14 +28,15 @@ public:
     ~TextDocument() override;
 
     /**
-     * @brief Задать идентификатор шаблона, с которым работает документ
-     */
-    void setTemplateId(const QString& _templateId);
-
-    /**
-     * @brief Задать модель текста
+     * @brief Модель текста
      */
     void setModel(BusinessLayer::TextModel* _model, bool _canChangeModel = true);
+    BusinessLayer::TextModel* model() const;
+
+    /**
+     * @brief Настроить необходимость корректировок (переданные параметры будут активированы)
+     */
+    void setCorrectionOptions(const QStringList& _options);
 
     /**
      * @brief Получить позицию элемента в заданном индексе
@@ -44,48 +48,87 @@ public:
     int itemEndPosition(const QModelIndex& _index);
 
     /**
-     * @brief Получить номер главы для заданного блока
+     * @brief Получить цвет сцены/папки для заданного блока
      */
-    QString chapterNumber(const QTextBlock& _forBlock) const;
+    QColor itemColor(const QTextBlock& _forBlock) const;
 
     /**
-     * @brief Сформировать mime-данные текста в заданном диапазоне
+     * @brief Получить цвета всех родительских элементов заданного блока
+     */
+    QVector<QColor> itemColors(const QTextBlock& _forBlock) const;
+
+    /**
+     * @brief Получить заголовк сцены для заданного блока
+     */
+    QString groupTitle(const QTextBlock& _forBlock) const;
+
+    /**
+     * @brief Сформировать mime-данные сценария в заданном диапазоне
      */
     QString mimeFromSelection(int _fromPosition, int _toPosition) const;
 
     /**
-     * @brief Вставить контент из mime-данных с текстом в заданной позиции
+     * @brief Вставить контент из mime-данных со сценарием в заданной позиции
+     * @return Позиция завершения вставки, либо -1 если вставки не было
      */
-    void insertFromMime(int _position, const QString& _mimeData);
+    int insertFromMime(int _position, const QString& _mimeData);
 
     /**
      * @brief Вставить новый блок заданного типа
      */
-    void addParagraph(BusinessLayer::TextParagraphType _type,
-        QTextCursor _cursor);
+    void addParagraph(BusinessLayer::TextParagraphType _type, TextCursor _cursor);
 
     /**
      * @brief Установить тип блока для заданного курсора
      */
-    void setParagraphType(BusinessLayer::TextParagraphType _type,
-        const QTextCursor& _cursor);
+    void setParagraphType(BusinessLayer::TextParagraphType _type, const TextCursor& _cursor);
 
     /**
      * @brief Очистить текущий блок от установленного в нём типа
      */
-    void cleanParagraphType(const QTextCursor& _cursor);
+    void cleanParagraphType(const TextCursor& _cursor);
 
     /**
      * @brief Применить заданный тип блока к тексту, на который указывает курсор
      */
-    void applyParagraphType(BusinessLayer::TextParagraphType _type,
-        const QTextCursor& _cursor);
+    void applyParagraphType(BusinessLayer::TextParagraphType _type, const TextCursor& _cursor);
+
+    /**
+     * @brief Разделить параграф на два
+     */
+    void splitParagraph(const TextCursor& _cursor);
+
+    /**
+     * @brief Соединить разделённый параграф
+     */
+    void mergeParagraph(const TextCursor& _cursor);
 
     /**
      * @brief Добавить редакторсую заметку в текущее выделение
      */
     void addReviewMark(const QColor& _textColor, const QColor& _backgroundColor,
-        const QString& _comment, const QTextCursor& _cursor);
+                       const QString& _comment, const TextCursor& _cursor);
+
+    /**
+     * @brief Получить закладку блока
+     */
+    TextModelTextItem::Bookmark bookmark(const QTextBlock& _forBlock) const;
+
+protected:
+    /**
+     * @brief Может ли документ менять модель
+     */
+    bool canChangeModel() const;
+
+    /**
+     * @brief Задать корректировщик текста
+     */
+    void setCorrector(AbstractTextCorrector* _corrector);
+
+    /**
+     * @brief Интерфейс для обработки сброса модели
+     */
+    virtual void processModelReset();
 
 private:
     /**
@@ -93,9 +136,14 @@ private:
      */
     void updateModelOnContentChange(int _position, int _charsRemoved, int _charsAdded);
 
+    /**
+     * @brief Вставить таблицу в заданном курсоре
+     */
+    void insertTable(const TextCursor& _cursor);
+
 private:
     class Implementation;
     QScopedPointer<Implementation> d;
 };
 
-} // namespace Ui
+} // namespace BusinessLayer

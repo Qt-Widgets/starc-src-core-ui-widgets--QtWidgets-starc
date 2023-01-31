@@ -1,19 +1,18 @@
 #pragma once
 
-#include "private/qabstractscrollarea_p.h"
-#include "QtGui/qtextdocumentfragment.h"
-#include "QtWidgets/qscrollbar.h"
-#include "QtGui/qtextcursor.h"
-#include "QtGui/qtextformat.h"
-#include "QtWidgets/qmenu.h"
-#include "QtGui/qabstracttextdocumentlayout.h"
 #include "QtCore/qbasictimer.h"
 #include "QtCore/qpropertyanimation.h"
 #include "QtCore/qurl.h"
-#include "private/qwidgettextcontrol_p.h"
-
-#include "page_text_edit.h"
+#include "QtGui/qabstracttextdocumentlayout.h"
+#include "QtGui/qtextcursor.h"
+#include "QtGui/qtextdocumentfragment.h"
+#include "QtGui/qtextformat.h"
+#include "QtWidgets/qmenu.h"
+#include "QtWidgets/qscrollbar.h"
 #include "page_metrics.h"
+#include "page_text_edit.h"
+#include "private/qabstractscrollarea_p.h"
+#include "private/qwidgettextcontrol_p.h"
 
 class QMimeData;
 class PageTextEditPrivate : public QAbstractScrollAreaPrivate
@@ -22,39 +21,49 @@ class PageTextEditPrivate : public QAbstractScrollAreaPrivate
 public:
     PageTextEditPrivate();
 
-    void init(const QString &html = QString());
-    void paint(QPainter *p, QPaintEvent *e);
-    void _q_repaintContents(const QRectF &contentsRect);
+    void init(const QString& html = QString());
+    void paint(QPainter* p, QPaintEvent* e);
+    void _q_repaintContents(const QRectF& contentsRect);
 
-    inline QPoint mapToContents(const QPoint &point) const
-    { return QPoint(point.x() + horizontalOffset(), point.y() + verticalOffset()); }
+    inline QPoint mapToContents(const QPoint& point) const
+    {
+        return QPoint(point.x() + horizontalOffset(), point.y() + verticalOffset());
+    }
 
     void _q_adjustScrollbars();
-    void _q_ensureVisible(const QRectF &rect);
+    void _q_ensureVisible(const QRectF& rect);
     void relayoutDocument();
 
     void createAutoBulletList();
     void pageUpDown(QTextCursor::MoveOperation op, QTextCursor::MoveMode moveMode);
 
     inline int horizontalOffset() const
-    { return q_func()->isRightToLeft() ? (hbar->maximum() - hbar->value()) : hbar->value(); }
+    {
+        return q_func()->isRightToLeft() ? (hbar->maximum() - hbar->value()) : hbar->value();
+    }
     inline int verticalOffset() const
-    { return vbar->value(); }
+    {
+        return vbar->value();
+    }
 
-    inline void sendControlEvent(QEvent *e)
-    { control->processEvent(e, QPointF(horizontalOffset(), verticalOffset()), viewport); }
+    inline void sendControlEvent(QEvent* e)
+    {
+        control->processEvent(e, QPointF(horizontalOffset(), verticalOffset()), viewport);
+    }
 
-    void _q_currentCharFormatChanged(const QTextCharFormat &format);
+    void _q_currentCharFormatChanged(const QTextCharFormat& format);
     void _q_cursorPositionChanged();
-    void _q_hoveredBlockWithMarkerChanged(const QTextBlock &block);
+    void _q_hoveredBlockWithMarkerChanged(const QTextBlock& block);
 
     void updateDefaultTextOption();
 
     // re-implemented by QTextBrowser, called by QTextDocument::loadResource
-    virtual QUrl resolveUrl(const QUrl &url) const
-    { return url; }
+    virtual QUrl resolveUrl(const QUrl& url) const
+    {
+        return url;
+    }
 
-    QWidgetTextControl *control;
+    QWidgetTextControl* control;
 
     PageTextEdit::AutoFormatting autoFormatting;
     bool tabChangesFocus;
@@ -84,6 +93,7 @@ public:
 #ifdef QT_KEYPAD_NAVIGATION
     QBasicTimer deleteAllTimer;
 #endif
+
 
     //
     // Дополнения, необходимые для того, чтобы превратить простой QTextEdit в постраничный редактор
@@ -127,9 +137,14 @@ public:
     void paintFooter(QPainter* _painter, const QRectF& _rect);
 
     /**
-     * @brief Нарисовать подсветки
+     * @brief Нарисовать подсветку строки
      */
-    void paintHighlights(QPainter* _painter);
+    void paintLineHighlighting(QPainter* _painter);
+
+    /**
+     * @brief Затемнить текст за пределами текущего абзаца
+     */
+    void paintTextBlocksOverlay(QPainter* _painter);
 
     /**
      * @brief Установить область обрезки так, чтобы вырезалось всё, что выходит на поля страницы
@@ -137,9 +152,16 @@ public:
     void clipPageDecorationRegions(QPainter* _painter);
 
     /**
+     * @brief Скорректировать положение блока с курсором для режима печатной машинки
+     */
+    void updateBlockWithCursorPlacement();
+    void prepareBlockWithCursorPlacementUpdate(QKeyEvent* _event);
+
+
+    /**
      * @brief Включена ли возможность выделения текста
      */
-    bool m_textSelectionEnabled = true;
+    bool textSelectionEnabled = true;
 
     /**
      * @brief Режим отображения текста
@@ -147,48 +169,60 @@ public:
      * true - постраничный
      * false - сплошной
      */
-    bool m_usePageMode = false;
+    bool usePageMode = false;
 
     /**
      * @brief Необходимо ли добавлять пространство снизу в обычном режиме
      */
-    bool m_addBottomSpace = false;
+    bool addBottomSpace = false;
 
     /**
      * @brief Необходимо ли показывать номера страниц
      */
-    bool m_showPageNumbers = false;
+    bool showPageNumbers = false;
+    bool showPageNumberAtFirstPage = true;
 
     /**
      * @brief Где показывать номера страниц
      */
-    Qt::Alignment m_pageNumbersAlignment;
+    Qt::Alignment pageNumbersAlignment;
 
     /**
      * @brief Метрика страницы редактора
      */
-    PageMetrics m_pageMetrics;
+    PageMetrics pageMetrics;
 
     /**
      * @brief Расстояние между страницами
      */
-    qreal m_pageSpacing = 10.0;
+    qreal pageSpacing = 10.0;
 
     /**
      * @brief Колонтитулы
      */
-    QString m_header;
-    QString m_footer;
+    QString header;
+    QString footer;
 
     /**
      * @brief Подсвечивать ли текущую строку
      */
-    bool m_highlightCurrentLine = false;
+    bool highlightCurrentLine = false;
+
+    /**
+     * @brief Фокусировать ли текущий абзац
+     */
+    bool focusCurrentParagraph = false;
+
+    /**
+     * @brief Использовать ли прокрутку в стиле печатной машинки
+     */
+    bool useTypewriterScrolling = false;
+    bool needUpdateBlockWithCursorPlacement = false;
 
     /**
      * @brief Анимация скроллирования
      */
-    QPropertyAnimation m_scrollAnimation;
+    QPropertyAnimation scrollAnimation;
 
     //
     // Дополнения для корректной работы с мышью при наличии невидимых текстовых блоков в документе
@@ -198,8 +232,8 @@ public:
      * @brief Отправить скорректированное событие о взаимодействии мышью
      */
     /** @{ */
-    void sendControlMouseEvent(QMouseEvent *e);
-    void sendControlContextMenuEvent(QContextMenuEvent *e);
+    void sendControlMouseEvent(QMouseEvent* e);
+    void sendControlContextMenuEvent(QContextMenuEvent* e);
     /** @} */
 
 private:
@@ -208,5 +242,5 @@ private:
      * @note Используется в событиях связанных с мышью из-за того, что при наличии невидимых блоков
      *		 в документе, стандартная реализация иногда скачет сильно вниз
      */
-    QPoint correctMousePosition(const QPoint& _eventPos);
+    QPoint correctMousePosition(const QPoint& _eventPos) const;
 };

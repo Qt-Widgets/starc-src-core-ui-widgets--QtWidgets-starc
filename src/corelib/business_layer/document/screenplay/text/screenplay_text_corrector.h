@@ -1,23 +1,14 @@
 #pragma once
 
-#include <corelib_global.h>
-
-#include <QObject>
-
-class QTextBlock;
-class QTextBlockFormat;
-class QTextDocument;
+#include <business_layer/document/text/abstract_text_corrector.h>
 
 
-namespace BusinessLayer
-{
-
-class ScreenplayTextCursor;
+namespace BusinessLayer {
 
 /**
  * @brief Класс корректирующий текст сценария
  */
-class CORE_LIBRARY_EXPORT ScreenplayTextCorrector : public QObject
+class CORE_LIBRARY_EXPORT ScreenplayTextCorrector : public AbstractTextCorrector
 {
     Q_OBJECT
 
@@ -32,39 +23,29 @@ public:
     ~ScreenplayTextCorrector() override;
 
     /**
-     * @brief Задать идентификатор шаблона, с которым работает корректор
-     */
-    void setTemplateId(const QString& _templateId);
-
-    /**
      * @brief Установить необходимость корректировать текст блоков имён персонажей
      */
-    void setNeedToCorrectCharactersNames(bool _need);
-
-    /**
-     * @brief Установить необходимость корректировать текст на разрывах страниц
-     */
-    void setNeedToCorrectPageBreaks(bool _need);
+    void setCorrectionOptions(const QStringList& _options) override;
 
     /**
      * @brief Очистить все сохранённые параметры
      */
-    void clear();
+    void clear() override;
 
+protected:
     /**
      * @brief Выполнить корректировки
      */
-    void correct(int _position = -1, int _charsChanged = 0);
+    void makeCorrections(int _position = -1, int _charsChanged = 0) override;
 
     /**
-     * @brief Подготовиться к корректировке и выполнить подготовленную корректировку
+     * @brief Выполнить "мягкие" корректировки
      */
-    void planCorrection(int _position, int _charsRemoved, int _charsAdded);
-    void makePlannedCorrection();
+    void makeSoftCorrections(int _position = -1, int _charsChanged = 0) override;
 
 private:
     class Implementation;
     QScopedPointer<Implementation> d;
 };
 
-} // namespace Ui
+} // namespace BusinessLayer

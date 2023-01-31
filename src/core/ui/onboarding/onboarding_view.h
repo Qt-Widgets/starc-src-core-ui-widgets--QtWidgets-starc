@@ -5,8 +5,7 @@
 #include <QLocale>
 
 
-namespace Ui
-{
+namespace Ui {
 enum class ApplicationTheme;
 
 /**
@@ -44,7 +43,7 @@ signals:
     /**
      * @brief Пользователь выбрал тему приложения
      */
-    void themeChanged(ApplicationTheme _theme);
+    void themeChanged(Ui::ApplicationTheme _theme);
 
     /**
      * @brief Пользователь изменил масштаб интерфейса

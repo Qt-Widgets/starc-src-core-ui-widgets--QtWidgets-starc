@@ -17,8 +17,29 @@ public:
     ~ComboBox() override;
 
     /**
-     * @brief Задать модель выпадающего списка
+     * @brief Переопределяем, чтобы реализовать собственную обработку смены режима редактирования
      */
+    void setReadOnly(bool _readOnly);
+
+    /**
+     * @brief Настроить кастомный цвет фона попапа
+     */
+    void setPopupBackgroundColor(const QColor& _color);
+
+    /**
+     * @brief Необходимо ли расширят размер попапа, чтобы содержимое полностью вмещалось
+     */
+    void setUseContentsWidth(bool _use);
+
+    /**
+     * @brief Отключаем контекстное меню для комбобокса
+     */
+    ContextMenu* createContextMenu(const QPoint& _position, QWidget* _parent = nullptr) override;
+
+    /**
+     * @brief Модель выпадающего списка
+     */
+    QAbstractItemModel* model() const;
     void setModel(QAbstractItemModel* _model);
 
     /**
@@ -26,6 +47,12 @@ public:
      */
     QModelIndex currentIndex() const;
     void setCurrentIndex(const QModelIndex& _index);
+
+    /**
+     * @brief Текст текущего выбранного элемента
+     */
+    QString currentText() const;
+    void setCurrentText(const QString& _text);
 
 signals:
     /**
@@ -45,14 +72,14 @@ protected:
     void focusOutEvent(QFocusEvent* _event) override;
 
     /**
+     * @brief Добавляем обработку кнопок винз/вверх
+     */
+    void keyPressEvent(QKeyEvent* _event) override;
+
+    /**
      * @brief Реализуем отображение/скрытие попапа
      */
     void mousePressEvent(QMouseEvent* _event) override;
-
-    /**
-     * @brief Переопределяем, чтобы пропустить обработку связанную с курсором редактора TextField'а
-     */
-    void mouseMoveEvent(QMouseEvent *_event) override;
 
 private:
     class Implementation;

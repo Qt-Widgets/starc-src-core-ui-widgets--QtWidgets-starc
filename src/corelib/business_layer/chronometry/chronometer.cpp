@@ -1,31 +1,30 @@
 #include "chronometer.h"
 
+#include <business_layer/templates/audioplay_template.h>
 #include <business_layer/templates/screenplay_template.h>
 #include <business_layer/templates/templates_facade.h>
-
 #include <data_layer/storage/settings_storage.h>
 #include <data_layer/storage/storage_facade.h>
-
-#include <ui/widgets/text_edit/page/page_metrics.h>
-
+#include <utils/helpers/measurement_helper.h>
 #include <utils/helpers/text_helper.h>
 
 #include <QTextBlock>
 #include <QtMath>
 
 
-namespace BusinessLayer
-{
+namespace BusinessLayer {
 
 namespace {
 
 /**
  * @brief Абстрактный класс вычислителя хронометража
  */
-class AbstractChronometer {
+class AbstractChronometer
+{
 public:
     virtual ~AbstractChronometer() = default;
-    virtual std::chrono::milliseconds duration(ScreenplayParagraphType _type, const QString& _text) const = 0;
+    virtual std::chrono::milliseconds duration(TextParagraphType _type, const QString& _text,
+                                               const TextTemplate& _textTemplate) const = 0;
 };
 
 /**
@@ -34,45 +33,54 @@ public:
 class PageChronometer : public AbstractChronometer
 {
 public:
-    std::chrono::milliseconds duration(ScreenplayParagraphType _type, const QString& _text) const override {
-        using namespace DataStorageLayer;
-        const auto milliseconds = StorageFacade::settingsStorage()->value(
-                                      kComponentsScreenplayDurationByPageDurationKey,
-                                      SettingsStorage::SettingsPlace::Application)
-                                  .toInt() * 1000;
+    explicit PageChronometer(int _secondsPerPage)
+        : m_secondsPerPage(_secondsPerPage)
+    {
+    }
 
-        const auto currentTemplate = BusinessLayer::TemplatesFacade::screenplayTemplate();
-        const auto mmPageSize = QPageSize(currentTemplate.pageSizeId()).rect(QPageSize::Millimeter).size();
+    std::chrono::milliseconds duration(TextParagraphType _type, const QString& _text,
+                                       const TextTemplate& _textTemplate) const override
+    {
+        const auto milliseconds = m_secondsPerPage * 1000;
+
+        const auto mmPageSize
+            = QPageSize(_textTemplate.pageSizeId()).rect(QPageSize::Millimeter).size();
         const bool x = true, y = false;
-        const auto pxPageSize = QSizeF(PageMetrics::mmToPx(mmPageSize.width(), x),
-                                       PageMetrics::mmToPx(mmPageSize.height(), y));
-        const auto mmPageMargins = currentTemplate.pageMargins();
-        const auto pxPageMargins = QMarginsF(PageMetrics::mmToPx(mmPageMargins.left(), x),
-                                             PageMetrics::mmToPx(mmPageMargins.top(), y),
-                                             PageMetrics::mmToPx(mmPageMargins.right(), x),
-                                             PageMetrics::mmToPx(mmPageMargins.bottom(), y));
-        const auto pageHeight = pxPageSize.height()
-                                - pxPageMargins.top() - pxPageMargins.bottom();
+        const auto pxPageSize = QSizeF(MeasurementHelper::mmToPx(mmPageSize.width(), x),
+                                       MeasurementHelper::mmToPx(mmPageSize.height(), y));
+        const auto mmPageMargins = _textTemplate.pageMargins();
+        const auto pxPageMargins = QMarginsF(MeasurementHelper::mmToPx(mmPageMargins.left(), x),
+                                             MeasurementHelper::mmToPx(mmPageMargins.top(), y),
+                                             MeasurementHelper::mmToPx(mmPageMargins.right(), x),
+                                             MeasurementHelper::mmToPx(mmPageMargins.bottom(), y));
+        const auto pageHeight = pxPageSize.height() - pxPageMargins.top() - pxPageMargins.bottom();
 
-        const auto blockStyle = currentTemplate.blockStyle(_type);
+        const auto blockStyle = _textTemplate.paragraphStyle(_type);
         const auto mmBlockMargins = blockStyle.margins();
-        const auto pxBlockMargins = QMarginsF(PageMetrics::mmToPx(mmBlockMargins.left(), x),
-                                              PageMetrics::mmToPx(mmBlockMargins.top(), y),
-                                              PageMetrics::mmToPx(mmBlockMargins.right(), x),
-                                              PageMetrics::mmToPx(mmBlockMargins.bottom(), y));
-        const auto textWidth = pxPageSize.width()
-                               - pxPageMargins.left() - pxPageMargins.right()
-                               - pxBlockMargins.left() - pxBlockMargins.right();
+        const auto pxBlockMargins
+            = QMarginsF(MeasurementHelper::mmToPx(mmBlockMargins.left(), x),
+                        MeasurementHelper::mmToPx(mmBlockMargins.top(), y),
+                        MeasurementHelper::mmToPx(mmBlockMargins.right(), x),
+                        MeasurementHelper::mmToPx(mmBlockMargins.bottom(), y));
+        const auto textWidth = pxPageSize.width() - pxPageMargins.left() - pxPageMargins.right()
+            - pxBlockMargins.left() - pxBlockMargins.right();
         const auto textLineHeight = TextHelper::fineLineSpacing(blockStyle.font());
         const auto textHeight = TextHelper::heightForWidth(_text, blockStyle.font(), textWidth)
-                                + pxBlockMargins.top() + pxBlockMargins.bottom()
-                                + blockStyle.linesBefore() * textLineHeight + blockStyle.linesAfter() * textLineHeight;
+            + pxBlockMargins.top() + pxBlockMargins.bottom()
+            + blockStyle.linesBefore() * textLineHeight + blockStyle.linesAfter() * textLineHeight;
 
         //
-        // Добавляем небольшую дельту, т.к. из-за приблизительности рассчётов не удаётся попадать точно в минуты
+        // Добавляем небольшую дельту, т.к. из-за приблизительности рассчётов не удаётся попадать
+        // точно в минуты
         //
-        return std::chrono::milliseconds{qCeil(textHeight / pageHeight * milliseconds * 1.01)};
+        return std::chrono::milliseconds{ qCeil(textHeight / pageHeight * milliseconds * 1.01) };
     }
+
+private:
+    /**
+     * @brief Секунд на страницу
+     */
+    const int m_secondsPerPage = 60;
 };
 
 /**
@@ -81,112 +89,224 @@ public:
 class CharactersChronometer : public AbstractChronometer
 {
 public:
-    std::chrono::milliseconds duration(ScreenplayParagraphType _type, const QString& _text) const override {
-        Q_UNUSED(_type)
+    CharactersChronometer(int _characters, bool _considerSpaces, int _seconds)
+        : m_characters(_characters)
+        , m_considerSpaces(_considerSpaces)
+        , m_seconds(_seconds)
+    {
+    }
 
-        using namespace DataStorageLayer;
-        const int characters = StorageFacade::settingsStorage()->value(
-                                   kComponentsScreenplayDurationByCharactersCharactersKey,
-                                   SettingsStorage::SettingsPlace::Application)
-                               .toInt();
-        const bool considerSpaces = StorageFacade::settingsStorage()->value(
-                                        kComponentsScreenplayDurationByCharactersIncludeSpacesKey,
-                                        SettingsStorage::SettingsPlace::Application)
-                                    .toBool();
-        const int milliseconds = StorageFacade::settingsStorage()->value(
-                                     kComponentsScreenplayDurationByCharactersDurationKey,
-                                     SettingsStorage::SettingsPlace::Application)
-                                 .toInt() * 1000;
+    std::chrono::milliseconds duration(TextParagraphType _type, const QString& _text,
+                                       const TextTemplate& _textTemplate) const override
+    {
+        Q_UNUSED(_type)
+        Q_UNUSED(_textTemplate)
 
         auto text = _text;
-        if (!considerSpaces) {
+        if (!m_considerSpaces) {
             text.remove(' ');
         }
 
-        const auto characterDuration = static_cast<qreal>(milliseconds) / characters;
-        return std::chrono::milliseconds{qCeil(text.length() * characterDuration)};
+        const int milliseconds = m_seconds * 1000;
+        const auto characterDuration = static_cast<qreal>(milliseconds) / m_characters;
+        return std::chrono::milliseconds{ qCeil(text.length() * characterDuration) };
     }
+
+private:
+    /**
+     * @brief Сколько символов
+     */
+    const int m_characters = 1000;
+
+    /**
+     * @brief Включая пробелы
+     */
+    const bool m_considerSpaces = true;
+
+    /**
+     * @brief Имеют заданную длительность
+     */
+    const int m_seconds = 60;
+};
+
+/**
+ * @brief Расчёт хронометража по количеству слов
+ */
+class WordsChronometer : public AbstractChronometer
+{
+public:
+    WordsChronometer(int _words, int _seconds)
+        : m_words(_words)
+        , m_seconds(_seconds)
+    {
+    }
+
+    std::chrono::milliseconds duration(TextParagraphType _type, const QString& _text,
+                                       const TextTemplate& _textTemplate) const override
+    {
+        Q_UNUSED(_type)
+        Q_UNUSED(_textTemplate)
+
+        const int milliseconds = m_seconds * 1000;
+        const auto characterDuration = static_cast<qreal>(milliseconds) / m_words;
+        return std::chrono::milliseconds{ qCeil(TextHelper::wordsCount(_text)
+                                                * characterDuration) };
+    }
+
+private:
+    /**
+     * @brief Сколько слов
+     */
+    const int m_words = 200;
+
+    /**
+     * @brief Имеют заданную длительность
+     */
+    const int m_seconds = 60;
 };
 
 /**
  * @brief Расчёт хронометража а-ля Софокл
  */
-//class ConfigurableChronometer : public AbstractChronometer
-//{
-//public:
-//    std::chrono::seconds duration(const QTextBlock& _block) const override {
-//        const auto blockType = ScreenplayBlockStyle::forBlock(_block);
-//        if (blockType != ScreenplayParagraphType::SceneHeading
-//            && blockType != ScreenplayParagraphType::Action
-//            && blockType != ScreenplayParagraphType::Dialogue
-//            && blockType != ScreenplayParagraphType::Lyrics) {
-//            return std::chrono::seconds{0};
-//        }
+class ConfigurableChronometer : public AbstractChronometer
+{
+public:
+    ConfigurableChronometer(qreal _secondsPerParagraphForAction, qreal _secondsPerEvery50ForAction,
+                            qreal _secondsPerParagraphForDialogue,
+                            qreal _secondsPerEvery50ForDialogue,
+                            qreal _secondsPerParagraphForSceneHeading,
+                            qreal _secondsPerEvery50ForSceneHeading)
+        : m_secondsPerParagraphForAction(_secondsPerParagraphForAction)
+        , m_secondsPerEvery50ForAction(_secondsPerEvery50ForAction)
+        , m_secondsPerParagraphForDialogue(_secondsPerParagraphForDialogue)
+        , m_secondsPerEvery50ForDialogue(_secondsPerEvery50ForDialogue)
+        , m_secondsPerParagraphForSceneHeading(_secondsPerParagraphForSceneHeading)
+        , m_secondsPerEvery50ForSceneHeading(_secondsPerEvery50ForSceneHeading)
+    {
+    }
 
-//        //
-//        // Длительность зависит от блока
-//        //
-//        qreal secondsForParagraph = 0;
-//        qreal secondsForEvery50 = 0;
-//        QString secondsForParagraphKey;
-//        QString secondsForEvery50Key;
+    std::chrono::milliseconds duration(TextParagraphType _type, const QString& _text,
+                                       const TextTemplate& _textTemplate) const override
+    {
+        Q_UNUSED(_textTemplate)
 
-//        if (blockType == ScenarioBlockStyle::Action) {
-//            secondsForParagraphKey = "chronometry/configurable/seconds-for-paragraph/action";
-//            secondsForEvery50Key = "chronometry/configurable/seconds-for-every-50/action";
-//        } else if (blockType == ScenarioBlockStyle::Dialogue
-//                   || blockType == ScenarioBlockStyle::Lyrics) {
-//            secondsForParagraphKey = "chronometry/configurable/seconds-for-paragraph/dialog";
-//            secondsForEvery50Key = "chronometry/configurable/seconds-for-every-50/dialog";
-//        } else {
-//            secondsForParagraphKey = "chronometry/configurable/seconds-for-paragraph/scene_heading";
-//            secondsForEvery50Key = "chronometry/configurable/seconds-for-every-50/scene_heading";
-//        }
+        const auto blockType = _type;
+        if (blockType != TextParagraphType::SceneHeading && blockType != TextParagraphType::Action
+            && blockType != TextParagraphType::Dialogue && blockType != TextParagraphType::Lyrics) {
+            return std::chrono::seconds{ 0 };
+        }
 
-//        //
-//        // Получим значения длительности
-//        //
-//        secondsForParagraph =
-//                StorageFacade::settingsStorage()->value(
-//                    secondsForParagraphKey,
-//                    SettingsStorage::ApplicationSettings)
-//                .toDouble();
+        //
+        // Длительность зависит от блока
+        //
+        qreal secondsForParagraph = 0.0;
+        qreal secondsForEvery50 = 0.0;
 
-//        secondsForEvery50 =
-//                StorageFacade::settingsStorage()->value(
-//                    secondsForEvery50Key,
-//                    SettingsStorage::ApplicationSettings)
-//                .toDouble();
+        if (blockType == TextParagraphType::Action) {
+            secondsForParagraph = m_secondsPerParagraphForAction;
+            secondsForEvery50 = m_secondsPerEvery50ForAction;
+        } else if (blockType == TextParagraphType::Dialogue
+                   || blockType == TextParagraphType::Lyrics) {
+            secondsForParagraph = m_secondsPerParagraphForDialogue;
+            secondsForEvery50 = m_secondsPerEvery50ForDialogue;
+        } else {
+            secondsForParagraph = m_secondsPerParagraphForSceneHeading;
+            secondsForEvery50 = m_secondsPerEvery50ForSceneHeading;
+        }
 
-//        const int every50 = 50;
-//        const qreal secondsPerCharacter = secondsForEvery50 / every50;
-//        const qreal textChron = secondsForParagraph + _length * secondsPerCharacter;
-//        return textChron;
-//    }
-//};
+        const qreal every50 = 50.0;
+        const qreal secondsPerCharacter = secondsForEvery50 / every50;
+        const qreal textDuration = secondsForParagraph + _text.length() * secondsPerCharacter;
+        return std::chrono::milliseconds{ qCeil(textDuration * 1000) };
+    }
 
+private:
+    qreal m_secondsPerParagraphForAction = 0.0;
+    qreal m_secondsPerEvery50ForAction = 0.0;
+    qreal m_secondsPerParagraphForDialogue = 0.0;
+    qreal m_secondsPerEvery50ForDialogue = 0.0;
+    qreal m_secondsPerParagraphForSceneHeading = 0.0;
+    qreal m_secondsPerEvery50ForSceneHeading = 0.0;
+};
+
+} // namespace
+
+
+std::chrono::milliseconds ScreenplayChronometer::duration(TextParagraphType _type,
+                                                          const QString& _text,
+                                                          const QString& _templateId)
+{
+    using namespace DataStorageLayer;
+
+    const auto chronometerType = settingsValue(kComponentsScreenplayDurationTypeKey).toInt();
+    const auto& screenplayTemplate = TemplatesFacade::screenplayTemplate(_templateId);
+
+    switch (static_cast<ChronometerType>(chronometerType)) {
+    case ChronometerType::Page: {
+        const auto secondsPerPage
+            = settingsValue(kComponentsScreenplayDurationByPageDurationKey).toInt();
+        return PageChronometer(secondsPerPage).duration(_type, _text, screenplayTemplate);
+    }
+
+    case ChronometerType::Characters: {
+        const int characters
+            = settingsValue(kComponentsScreenplayDurationByCharactersCharactersKey).toInt();
+        const bool considerSpaces
+            = settingsValue(kComponentsScreenplayDurationByCharactersIncludeSpacesKey).toBool();
+        const int seconds
+            = settingsValue(kComponentsScreenplayDurationByCharactersDurationKey).toInt();
+        return CharactersChronometer(characters, considerSpaces, seconds)
+            .duration(_type, _text, screenplayTemplate);
+    }
+
+    case ChronometerType::Configurable: {
+        const auto secondsPerParagraphForAction
+            = settingsValue(
+                  kComponentsScreenplayDurationConfigurableSecondsPerParagraphForActionKey)
+                  .toDouble();
+        const auto secondsPerEvery50ForAction
+            = settingsValue(kComponentsScreenplayDurationConfigurableSecondsPerEvery50ForActionKey)
+                  .toDouble();
+        const auto secondsPerParagraphForDialogue
+            = settingsValue(
+                  kComponentsScreenplayDurationConfigurableSecondsPerParagraphForDialogueKey)
+                  .toDouble();
+        const auto secondsPerEvery50ForDialogue
+            = settingsValue(
+                  kComponentsScreenplayDurationConfigurableSecondsPerEvery50ForDialogueKey)
+                  .toDouble();
+        const auto secondsPerParagraphForSceneHeading
+            = settingsValue(
+                  kComponentsScreenplayDurationConfigurableSecondsPerParagraphForSceneHeadingKey)
+                  .toDouble();
+        const auto secondsPerEvery50ForSceneHeading
+            = settingsValue(
+                  kComponentsScreenplayDurationConfigurableSecondsPerEvery50ForSceneHeadingKey)
+                  .toDouble();
+        return ConfigurableChronometer(secondsPerParagraphForAction, secondsPerEvery50ForAction,
+                                       secondsPerParagraphForDialogue, secondsPerEvery50ForDialogue,
+                                       secondsPerParagraphForSceneHeading,
+                                       secondsPerEvery50ForSceneHeading)
+            .duration(_type, _text, screenplayTemplate);
+    }
+
+    default: {
+        Q_ASSERT(false);
+        return {};
+    }
+    }
 }
 
-
-std::chrono::milliseconds Chronometer::duration(ScreenplayParagraphType _type, const QString& _text)
+std::chrono::milliseconds AudioplayChronometer::duration(TextParagraphType _type,
+                                                         const QString& _text,
+                                                         const QString& _templateId)
 {
-    const auto chronometerType = DataStorageLayer::StorageFacade::settingsStorage()->value(
-                                     DataStorageLayer::kComponentsScreenplayDurationTypeKey,
-                                     DataStorageLayer::SettingsStorage::SettingsPlace::Application).toInt();
-    switch (static_cast<ChronometerType>(chronometerType)) {
-        case ChronometerType::Page: {
-            return PageChronometer().duration(_type, _text);
-        }
+    using namespace DataStorageLayer;
 
-        case ChronometerType::Characters: {
-            return CharactersChronometer().duration(_type, _text);
-        }
-
-        default: {
-            Q_ASSERT(false);
-            return {};
-        }
-    }
+    const int words = settingsValue(kComponentsAudioplayDurationByWordsWordsKey).toInt();
+    const int seconds = settingsValue(kComponentsAudioplayDurationByWordsDurationKey).toInt();
+    const auto& audioplayTemplate = TemplatesFacade::audioplayTemplate(_templateId);
+    return WordsChronometer(words, seconds).duration(_type, _text, audioplayTemplate);
 }
 
 } // namespace BusinessLayer

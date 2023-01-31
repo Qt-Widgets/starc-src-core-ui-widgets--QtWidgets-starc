@@ -1,10 +1,11 @@
 #pragma once
 
+#include <QPageSize>
+
 #include <corelib_global.h>
 
-#include <qnamespace.h>
-
 class QMarginsF;
+class QRectF;
 
 
 /**
@@ -12,6 +13,8 @@ class QMarginsF;
  */
 CORE_LIBRARY_EXPORT Qt::Alignment alignmentFromString(const QString& _text);
 CORE_LIBRARY_EXPORT QMarginsF marginsFromString(const QString& _margins);
+CORE_LIBRARY_EXPORT QRectF rectFromString(const QString& _rect);
+CORE_LIBRARY_EXPORT QPageSize::PageSizeId pageSizeIdFromString(const QString& _pageSize);
 
 /**
  * @brief Преобразование разных типов в строку
@@ -21,3 +24,5 @@ CORE_LIBRARY_EXPORT QString toString(int _value);
 CORE_LIBRARY_EXPORT QString toString(qreal _value);
 CORE_LIBRARY_EXPORT QString toString(Qt::Alignment _alignment);
 CORE_LIBRARY_EXPORT QString toString(const QMarginsF& _margins);
+CORE_LIBRARY_EXPORT QString toString(const QRectF& _rect);
+CORE_LIBRARY_EXPORT QString toString(QPageSize::PageSizeId _pageSize);

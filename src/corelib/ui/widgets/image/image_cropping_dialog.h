@@ -6,7 +6,7 @@
 /**
  * @brief Диалог обрезки изображения
  */
-class ImageCroppingDialog : public AbstractDialog
+class CORE_LIBRARY_EXPORT ImageCroppingDialog : public AbstractDialog
 {
     Q_OBJECT
 
@@ -33,6 +33,7 @@ public:
      * @brief Задать подсказку по обрезке изображения
      */
     void setImageCroppingText(const QString& _text);
+    void setImageCroppingNote(const QString& _text);
 
 signals:
     /**

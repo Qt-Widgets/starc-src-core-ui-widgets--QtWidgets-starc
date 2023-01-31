@@ -2,41 +2,35 @@
 
 #include "../screenplay_text_edit.h"
 
-#include <business_layer/document/screenplay/text/screenplay_text_block_data.h>
-#include <business_layer/document/screenplay/text/screenplay_text_cursor.h>
+#include <business_layer/document/text/text_block_data.h>
+#include <business_layer/document/text/text_cursor.h>
 #include <business_layer/templates/screenplay_template.h>
-
 #include <data_layer/storage/settings_storage.h>
 #include <data_layer/storage/storage_facade.h>
 
 #include <QKeyEvent>
 #include <QTextBlock>
 
-using BusinessLayer::ScreenplayBlockStyle;
-using BusinessLayer::ScreenplayParagraphType;
+using BusinessLayer::TextBlockStyle;
+using BusinessLayer::TextParagraphType;
 using Ui::ScreenplayTextEdit;
 
 
-namespace KeyProcessingLayer
-{
+namespace KeyProcessingLayer {
 
 namespace {
 /**
  * @brief Получить тип перехода/смены в зависимости от заданных параметров
  */
-static ScreenplayParagraphType actionFor(bool _tab, bool _jump, ScreenplayParagraphType _blockType) {
-    const QString settingsKey =
-            QString("screenplay-editor/styles-%1/from-%2-by-%3")
-            .arg(_jump ? "jumping" : "changing")
-            .arg(BusinessLayer::toString(_blockType))
-            .arg(_tab ? "tab" : "enter");
-
-    const auto typeString =
-            DataStorageLayer::StorageFacade::settingsStorage()->value(
-                settingsKey, DataStorageLayer::SettingsStorage::SettingsPlace::Application
-                ).toString();
-
-    return BusinessLayer::screenplayParagraphTypeFromString(typeString);
+static TextParagraphType actionFor(bool _tab, bool _jump, TextParagraphType _blockType)
+{
+    const QString settingsKey
+        = QString("%1/styles-%2/from-%3-by-%4")
+              .arg(DataStorageLayer::kComponentsScreenplayEditorKey,
+                   (_jump ? "jumping" : "changing"), BusinessLayer::toString(_blockType),
+                   (_tab ? "tab" : "enter"));
+    const auto typeString = settingsValue(settingsKey).toString();
+    return BusinessLayer::textParagraphTypeFromString(typeString);
 }
 
 /**
@@ -48,30 +42,30 @@ const bool kEnter = false;
 const bool kJump = true;
 const bool kChange = false;
 /** @} */
-}
+} // namespace
 
 
-StandardKeyHandler::StandardKeyHandler(Ui::ScreenplayTextEdit* _editor) :
-    AbstractKeyHandler(_editor)
+StandardKeyHandler::StandardKeyHandler(Ui::ScreenplayTextEdit* _editor)
+    : AbstractKeyHandler(_editor)
 {
 }
 
-ScreenplayParagraphType StandardKeyHandler::jumpForTab(ScreenplayParagraphType _blockType)
+TextParagraphType StandardKeyHandler::jumpForTab(TextParagraphType _blockType)
 {
     return actionFor(kTab, kJump, _blockType);
 }
 
-ScreenplayParagraphType StandardKeyHandler::jumpForEnter(ScreenplayParagraphType _blockType)
+TextParagraphType StandardKeyHandler::jumpForEnter(TextParagraphType _blockType)
 {
     return actionFor(kEnter, kJump, _blockType);
 }
 
-ScreenplayParagraphType StandardKeyHandler::changeForTab(ScreenplayParagraphType _blockType)
+TextParagraphType StandardKeyHandler::changeForTab(TextParagraphType _blockType)
 {
     return actionFor(kTab, kChange, _blockType);
 }
 
-ScreenplayParagraphType StandardKeyHandler::changeForEnter(ScreenplayParagraphType _blockType)
+TextParagraphType StandardKeyHandler::changeForEnter(TextParagraphType _blockType)
 {
     return actionFor(kEnter, kChange, _blockType);
 }
@@ -117,78 +111,89 @@ void StandardKeyHandler::handleUp(QKeyEvent* _event)
         return;
     }
 
+    using namespace BusinessLayer;
+
     //
     // Если подстановщик скрыт - имитируем действие обычного редактора
     //
     const bool isShiftPressed = _event->modifiers().testFlag(Qt::ShiftModifier);
-    const QTextCursor::MoveMode cursorMoveMode =
-            isShiftPressed ? QTextCursor::KeepAnchor : QTextCursor::MoveAnchor;
+    const auto cursorMoveMode = isShiftPressed ? TextCursor::KeepAnchor : TextCursor::MoveAnchor;
 
-    QTextCursor cursor = editor()->textCursor();
+    TextCursor cursor = editor()->textCursor();
+
+    auto cursorRect = [this, &cursor] { return editor()->cursorRect(cursor); };
 
     //
     // Исходная позиция курсора
     //
-    int initCursorPosition = cursor.position();
+    const auto sourceCursorRect = cursorRect();
+    const bool sourceCursorInTable = cursor.inTable();
+    const bool sourceCursorInFirstColumn = cursor.inFirstColumn();
 
     //
-    // Рассчитаем количество символов от края
+    // Идём через один предыдущий символ до предыдущей строки и ищем в ней лучшее совпадение
     //
-    int marginFromLineStart = 0;
-    {
-        int currentLineYCoordinate = editor()->cursorRect(cursor).y();
-        while (!cursor.atStart()
-               && editor()->cursorRect(cursor).y() == currentLineYCoordinate) {
-            cursor.movePosition(QTextCursor::PreviousCharacter, cursorMoveMode);
+    while (!cursor.atStart()) {
+        if (!cursor.movePosition(TextCursor::PreviousCharacter, cursorMoveMode)) {
+            cursor.setPosition(cursor.position() - 1, cursorMoveMode);
         }
-        marginFromLineStart =
-                initCursorPosition
-                - cursor.position()
-                - (cursor.atStart() ? 0 : 1);
+
+        //
+        // Если всё в той же строке
+        //      или в невидимом блоке
+        //      или в разделителе
+        //      или в декорации
+        //      или в блоке, в котором нельза показывать курсор
+        //      или в таблице, но в другой колонке
+        //
+        if (cursorRect().top() >= sourceCursorRect.top() || !cursor.block().isVisible()
+            || TextBlockStyle::forBlock(cursor.block()) == TextParagraphType::PageSplitter
+            || cursor.blockFormat().boolProperty(TextBlockStyle::PropertyIsCorrection)
+            || cursor.blockFormat().boolProperty(PageTextEdit::PropertyDontShowCursor)
+            || (sourceCursorInTable && cursor.inTable()
+                && ((sourceCursorInFirstColumn && !cursor.inFirstColumn())
+                    || (!sourceCursorInFirstColumn && cursor.inFirstColumn())))) {
+            continue;
+        }
+
+        //
+        // Дошли до нужно строки
+        //
+
+        break;
     }
 
     //
-    // В данный момент курсор либо в начале документа, либо поднялся к концу предыдущей строки
+    // Ищем лучшее совпадение на текущей строке
     //
-
-    if (!cursor.atStart()) {
-        //
-        // Если мы поднялись на строку вверх, но попали в невидимый блок, перейдём к предыдущему видимому
-        //
-        const QTextBlock firstDocumentBlock = cursor.document()->firstBlock();
-        while (cursor.block() != firstDocumentBlock
-               && (!cursor.block().isVisible()
-                   || ScreenplayBlockStyle::forBlock(cursor.block()) == ScreenplayParagraphType::PageSplitter
-                   || cursor.blockFormat().boolProperty(ScreenplayBlockStyle::PropertyIsCorrection))) {
-            cursor.movePosition(QTextCursor::PreviousBlock, cursorMoveMode);
-            cursor.movePosition(QTextCursor::EndOfBlock, cursorMoveMode);
+    auto findXDelta = [&cursorRect, sourceCursorRect] {
+        return abs(sourceCursorRect.right() - cursorRect().right());
+    };
+    const auto previousLineCursorRect = cursorRect();
+    auto bestXDelta = findXDelta();
+    while (!cursor.atStart()) {
+        if (!cursor.movePosition(TextCursor::PreviousCharacter, cursorMoveMode)) {
+            cursor.setPosition(cursor.position() - 1, cursorMoveMode);
         }
 
         //
-        // Сместим курсор в предыдущей строке на то кол-во символов, на которое он был смещён прежде
+        // Если предыдущий символ находится на другой строке, то прерываем поиск
         //
-        {
-            int currentLineEndPosition = cursor.position();
-            int currentLineYCoordinate = editor()->cursorRect(cursor).y();
-            while (!cursor.atStart()
-                   && editor()->cursorRect(cursor).y() == currentLineYCoordinate) {
-                cursor.movePosition(QTextCursor::PreviousCharacter, cursorMoveMode);
-            }
-
-            //
-            // Возвратим курсор на одну позицию назад, т.к. в предыдущем цикле мы перешли на новую строку
-            //
-            if (!cursor.atStart()) {
-                cursor.movePosition(QTextCursor::NextCharacter, cursorMoveMode);
-            }
-
-            int currentLineStartPosition = cursor.position();
-            if (currentLineStartPosition + marginFromLineStart < currentLineEndPosition) {
-                cursor.movePosition(QTextCursor::NextCharacter, cursorMoveMode, marginFromLineStart);
-            } else {
-                cursor.setPosition(currentLineEndPosition, cursorMoveMode);
-            }
+        if (cursorRect().top() != previousLineCursorRect.top()) {
+            cursor.movePosition(TextCursor::NextCharacter, cursorMoveMode);
+            break;
         }
+
+        //
+        // Если положение предыдущего символа дальше от цели, то прерываем поиск
+        //
+        const auto xDelta = findXDelta();
+        if (xDelta > bestXDelta) {
+            cursor.movePosition(TextCursor::NextCharacter, cursorMoveMode);
+            break;
+        }
+
+        bestXDelta = xDelta;
     }
 
     editor()->setTextCursor(cursor);
@@ -200,97 +205,101 @@ void StandardKeyHandler::handleDown(QKeyEvent* _event)
         return;
     }
 
+    using namespace BusinessLayer;
+
     //
     // Если подстановщик скрыт - имитируем действие обычного редактора
     //
     const bool isShiftPressed = _event->modifiers().testFlag(Qt::ShiftModifier);
-    const QTextCursor::MoveMode cursorMoveMode =
-            isShiftPressed ? QTextCursor::KeepAnchor : QTextCursor::MoveAnchor;
+    const auto cursorMoveMode = isShiftPressed ? TextCursor::KeepAnchor : TextCursor::MoveAnchor;
 
-    QTextCursor cursor = editor()->textCursor();
+    TextCursor cursor = editor()->textCursor();
+
+    auto cursorRect = [this, &cursor] { return editor()->cursorRect(cursor); };
 
     //
     // Исходная позиция курсора
     //
-    int initCursorPosition = cursor.position();
+    const auto sourceCursorRect = cursorRect();
+    const bool sourceCursorInTable = cursor.inTable();
+    const bool sourceCursorInFirstColumn = cursor.inFirstColumn();
 
     //
-    // Рассчитаем количество символов от края
+    // Идём через один последующий символ до следующей строки и ищем в ней лучшее совпадение
     //
-    int marginFromLineStart = 0;
-    {
-        int currentLineYCoordinate = editor()->cursorRect(cursor).y();
-        while (!cursor.atStart()
-               && editor()->cursorRect(cursor).y() == currentLineYCoordinate) {
-            cursor.movePosition(QTextCursor::PreviousCharacter, cursorMoveMode);
+    while (!cursor.atEnd()) {
+        if (!cursor.movePosition(TextCursor::NextCharacter, cursorMoveMode)) {
+            cursor.setPosition(cursor.position() + 1, cursorMoveMode);
         }
-        marginFromLineStart =
-                initCursorPosition
-                - cursor.position()
-                - (cursor.atStart() ? 0 : 1);
+
+        //
+        // Если всё в той же строке
+        //      или в невидимом блоке
+        //      или в разделителе
+        //      или в декорации
+        //      или в блоке, в котором нельза показывать курсор
+        //      или в таблице, но в другой колонке
+        //
+        if (cursorRect().top() <= sourceCursorRect.top() || !cursor.block().isVisible()
+            || TextBlockStyle::forBlock(cursor.block()) == TextParagraphType::PageSplitter
+            || cursor.blockFormat().boolProperty(TextBlockStyle::PropertyIsCorrection)
+            || cursor.blockFormat().boolProperty(PageTextEdit::PropertyDontShowCursor)
+            || (sourceCursorInTable && cursor.inTable()
+                && ((sourceCursorInFirstColumn && !cursor.inFirstColumn())
+                    || (!sourceCursorInFirstColumn && cursor.inFirstColumn())))) {
+            continue;
+        }
+
+        //
+        // Дошли до нужно строки
+        //
+
+        break;
     }
 
     //
-    // Вернём курсор в исходное положение
+    // Ищем лучшее совпадение на текущей строке
     //
-    cursor.setPosition(initCursorPosition, cursorMoveMode);
-
-    //
-    // Сместим курсор к следующей строке или к концу документа
-    //
-    {
-        int currentLineYCoordinate = editor()->cursorRect(cursor).y();
-        while (!cursor.atEnd()
-               && editor()->cursorRect(cursor).y() == currentLineYCoordinate) {
-            cursor.movePosition(QTextCursor::NextCharacter, cursorMoveMode);
+    auto findXDelta = [&cursorRect, sourceCursorRect] {
+        return abs(sourceCursorRect.right() - cursorRect().right());
+    };
+    const auto previousLineCursorRect = cursorRect();
+    auto bestXDelta = findXDelta();
+    while (!cursor.atEnd()) {
+        if (!cursor.movePosition(TextCursor::NextCharacter, cursorMoveMode)) {
+            cursor.setPosition(cursor.position() + 1, cursorMoveMode);
         }
+
+        //
+        // Если следующий символ находится на другой строке, то прерываем поиск
+        //
+        if (cursorRect().top() != previousLineCursorRect.top()) {
+            cursor.movePosition(TextCursor::PreviousCharacter, cursorMoveMode);
+            break;
+        }
+
+        //
+        // Если положение следуещего символа дальше от цели, то прерываем поиск
+        //
+        const auto xDelta = findXDelta();
+        if (xDelta > bestXDelta) {
+            cursor.movePosition(TextCursor::PreviousCharacter, cursorMoveMode);
+            break;
+        }
+
+        bestXDelta = xDelta;
     }
 
+    editor()->setTextCursorForced(cursor);
+
     //
-    // В данный момент курсор либо в конце документа, либо перешёл к началу следующей строки
+    // Если курсор в абзаце с таблицей, а под таблицей ничего нет, то добавим блок вниз,
     //
-
-    if (!cursor.atEnd()) {
-        //
-        // Если мы опустились на строку вниз, но попали в невидимый блок, перейдём к следующему видимому
-        //
-        while (!cursor.atEnd()
-               && (!cursor.block().isVisible()
-                   || ScreenplayBlockStyle::forBlock(cursor.block()) == ScreenplayParagraphType::PageSplitter
-                   || cursor.blockFormat().boolProperty(ScreenplayBlockStyle::PropertyIsCorrection))) {
-            cursor.movePosition(QTextCursor::NextBlock, cursorMoveMode);
-            cursor.movePosition(QTextCursor::EndOfBlock, cursorMoveMode);
-        }
-
-        //
-        // Сместим курсор в следующей строке на то кол-во символов, на которое он был смещён прежде
-        //
-        {
-            int currentLineStartPosition = cursor.position();
-            int currentLineYCoordinate = editor()->cursorRect(cursor).y();
-            while (!cursor.atEnd()
-                   && editor()->cursorRect(cursor).y() == currentLineYCoordinate) {
-                cursor.movePosition(QTextCursor::NextCharacter, cursorMoveMode);
-            }
-
-            //
-            // Возвратим курсор на одну позицию назад, т.к. в предыдущем цикле мы перешли на новую строку
-            //
-            if (!cursor.atEnd()) {
-                cursor.movePosition(QTextCursor::PreviousCharacter, cursorMoveMode);
-            }
-
-            int currentLineEndPosition = cursor.position();
-            if (currentLineStartPosition + marginFromLineStart < currentLineEndPosition) {
-                const int moveRepeats = currentLineEndPosition - currentLineStartPosition - marginFromLineStart;
-                cursor.movePosition(QTextCursor::PreviousCharacter, cursorMoveMode, moveRepeats);
-            } else {
-                cursor.setPosition(currentLineEndPosition, cursorMoveMode);
-            }
-        }
+    if (cursor.atEnd()
+        && TextBlockStyle::forBlock(cursor.block()) == TextParagraphType::PageSplitter) {
+        cursor.movePosition(QTextCursor::PreviousBlock);
+        editor()->addParagraph(TextParagraphType::Action);
     }
-
-    editor()->setTextCursor(cursor);
 }
 
 void StandardKeyHandler::handlePageUp(QKeyEvent* _event)
@@ -330,7 +339,34 @@ void StandardKeyHandler::handleOther(QKeyEvent*)
 
 void StandardKeyHandler::removeCharacters(bool _backward)
 {
-    BusinessLayer::ScreenplayTextCursor cursor = editor()->textCursor();
+    BusinessLayer::TextCursor cursor = editor()->textCursor();
+
+    //
+    // Если пользователь нажимает Backspace в начале первого блока бита, то удаляем полностью блок с
+    // заголовком предшествующего бита
+    //
+    if (!cursor.atStart() && !cursor.hasSelection() && cursor.positionInBlock() == 0 && _backward
+        && TextBlockStyle::forBlock(cursor.block().previous()) == TextParagraphType::BeatHeading) {
+        cursor.movePosition(QTextCursor::PreviousBlock);
+        cursor.movePosition(QTextCursor::StartOfBlock);
+        cursor.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
+        cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
+        editor()->setTextCursorForced(cursor);
+    }
+    //
+    // Если пользователь нажал Delete в конце непустого абзаца и при этом после текущего абзаца идёт
+    // блок с заголовком бита, то удаляем блок заголовка бита
+    //
+    else if (!cursor.atEnd() && !cursor.hasSelection() && !cursor.block().text().isEmpty()
+             && cursor.positionInBlock() == cursor.block().text().length() && !_backward
+             && TextBlockStyle::forBlock(cursor.block().next()) == TextParagraphType::BeatHeading) {
+        cursor.movePosition(QTextCursor::NextBlock);
+        cursor.movePosition(QTextCursor::EndOfBlock);
+        cursor.movePosition(QTextCursor::StartOfBlock, QTextCursor::KeepAnchor);
+        cursor.movePosition(QTextCursor::PreviousCharacter, QTextCursor::KeepAnchor);
+        editor()->setTextCursorForced(cursor);
+    }
+
     cursor.removeCharacters(_backward, editor());
 }
 

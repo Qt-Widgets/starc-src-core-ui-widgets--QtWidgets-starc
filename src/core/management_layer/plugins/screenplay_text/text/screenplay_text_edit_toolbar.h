@@ -5,8 +5,7 @@
 class QAbstractItemModel;
 
 
-namespace Ui
-{
+namespace Ui {
 
 /**
  * @brief Панель инструментов редактора сценария
@@ -18,6 +17,11 @@ class ScreenplayTextEditToolbar : public FloatingToolBar
 public:
     explicit ScreenplayTextEditToolbar(QWidget* _parent = nullptr);
     ~ScreenplayTextEditToolbar() override;
+
+    /**
+     * @brief Настроить режим редактирования
+     */
+    void setReadOnly(bool _readOnly);
 
     /**
      * @brief Задать модель выпадающего списка типов абзацев
@@ -66,9 +70,9 @@ signals:
 
 protected:
     /**
-     * @brief Скрываем попап, когда фокус ушёл из виджета
+     * @brief Переопределяем для более красивой работы с выпадающими списками
      */
-    void focusOutEvent(QFocusEvent* _event) override;
+    bool canAnimateHoverOut() const override;
 
     /**
      * @brief Обновить переводы

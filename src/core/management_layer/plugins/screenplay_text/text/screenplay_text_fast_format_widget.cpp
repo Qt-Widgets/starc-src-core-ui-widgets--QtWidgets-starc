@@ -3,106 +3,24 @@
 #include "screenplay_text_edit.h"
 
 #include <business_layer/templates/screenplay_template.h>
-
 #include <ui/design_system/design_system.h>
 #include <ui/widgets/button/button.h>
-
 #include <utils/helpers/color_helper.h>
 #include <utils/helpers/text_helper.h>
 #include <utils/tools/run_once.h>
 
 #include <QAbstractItemModel>
 #include <QPainter>
+#include <QPointer>
 #include <QVBoxLayout>
 
 
-namespace Ui
-{
+namespace Ui {
 
 namespace {
-    const char* kButtonTypeKey = "button-type";
-    const char* kIsButtonCurrentTypeKey = "is-button-current-type";
-}
-
-/**
- * @brief Кнопка панели инструментов
- */
-class FormatButton : public Button
-{
-public:
-    explicit FormatButton(QWidget* _parent);
-
-    /**
-     * @brief Задать текст горячей кнопки
-     */
-    void setShortcut(const QString& _shortcut);
-
-    /**
-     * @brief Переопределяем минимальный размер, чтобы панель выглядела опрятно
-     */
-    QSize sizeHint() const override;
-
-protected:
-    /**
-     * @brief Переопределяем, чтобы нарисовать текст шортката
-     */
-    void paintEvent(QPaintEvent* _event) override;
-
-private:
-    /**
-     * @brief Текст шортката
-     */
-    QString m_shortcut;
-};
-
-FormatButton::FormatButton(QWidget* _parent)
-    : Button(_parent)
-{
-    setFocusPolicy(Qt::NoFocus);
-    setFlat(true);
-}
-
-void FormatButton::setShortcut(const QString& _shortcut)
-{
-    if (m_shortcut == _shortcut) {
-        return;
-    }
-
-    m_shortcut = _shortcut;
-    updateGeometry();
-    update();
-}
-
-QSize FormatButton::sizeHint() const
-{
-    const auto shortcutWidth = TextHelper::fineTextWidthF(m_shortcut, Ui::DesignSystem::font().overline());
-    return Button::sizeHint() + QSize(shortcutWidth + DesignSystem::button().spacing(), 0);
-}
-
-void FormatButton::paintEvent(QPaintEvent* _event)
-{
-    Button::paintEvent(_event);
-
-    //
-    // Рисуем шорткат
-    //
-    QPainter painter(this);
-    //
-    // ... настроим цвет текста, как в самой кнопке
-    //
-    painter.setPen(isEnabled()
-                   ? textColor()
-                   : ColorHelper::transparent(textColor(), DesignSystem::disabledTextOpacity()));
-    //
-    // ... собственно добавим текст шортката
-    //
-    const QRectF shortcutRect = contentsRect().marginsRemoved(DesignSystem::button().margins().toMargins());
-    painter.setFont(DesignSystem::font().overline());
-    painter.drawText(shortcutRect, Qt::AlignVCenter | Qt::AlignRight, m_shortcut);
-}
-
-
-// ****
+const char* kButtonTypeKey = "button-type";
+const char* kIsButtonCurrentTypeKey = "is-button-current-type";
+} // namespace
 
 
 class ScreenplayTextFastFormatWidget::Implementation
@@ -119,12 +37,12 @@ public:
     /**
      * @brief Модель типов форматов блоков
      */
-    QAbstractItemModel* model = nullptr;
+    QPointer<QAbstractItemModel> model;
 
     /**
      * @brief Список кнопок
      */
-    QList<FormatButton*> buttons;
+    QList<Button*> buttons;
 };
 
 ScreenplayTextFastFormatWidget::Implementation::Implementation(QWidget* _parent)
@@ -132,8 +50,8 @@ ScreenplayTextFastFormatWidget::Implementation::Implementation(QWidget* _parent)
     //
     // Создаём столько кнопок, сколько может быть стилей
     //
-    for (int index = 0; index < 12; ++index) {
-        buttons.append(new FormatButton(_parent));
+    for (int index = 0; index < 13; ++index) {
+        buttons.append(new Button(_parent));
     }
 }
 
@@ -152,8 +70,8 @@ void ScreenplayTextFastFormatWidget::Implementation::updateButtons()
         const auto itemModelIndex = model->index(itemIndex, 0);
         auto button = buttons.at(itemIndex);
         button->setVisible(true);
+        button->setFlat(true);
         button->setText(itemModelIndex.data(Qt::DisplayRole).toString());
-        button->setShortcut(itemModelIndex.data(Qt::WhatsThisRole).toString());
         button->setProperty(kButtonTypeKey, itemModelIndex);
     }
     //
@@ -172,9 +90,9 @@ void ScreenplayTextFastFormatWidget::Implementation::updateButtons()
 // ****
 
 
-ScreenplayTextFastFormatWidget::ScreenplayTextFastFormatWidget(QWidget *_parent)
-    : Widget(_parent),
-      d(new Implementation(this))
+ScreenplayTextFastFormatWidget::ScreenplayTextFastFormatWidget(QWidget* _parent)
+    : Widget(_parent)
+    , d(new Implementation(this))
 {
     for (auto button : d->buttons) {
         connect(button, &Button::clicked, this, [this, button] {
@@ -201,7 +119,7 @@ void ScreenplayTextFastFormatWidget::setParagraphTypesModel(QAbstractItemModel* 
         return;
     }
 
-    if (d->model != nullptr){
+    if (d->model != nullptr) {
         d->model->disconnect(this);
     }
 
@@ -218,9 +136,8 @@ void ScreenplayTextFastFormatWidget::setCurrentParagraphType(const QModelIndex& 
     for (auto button : d->buttons) {
         const bool isCurrentType = button->property(kButtonTypeKey).toModelIndex() == _index;
         button->setProperty(kIsButtonCurrentTypeKey, isCurrentType);
-        button->setTextColor(isCurrentType
-                             ? DesignSystem::color().secondary()
-                             : DesignSystem::color().onPrimary());
+        button->setTextColor(isCurrentType ? DesignSystem::color().accent()
+                                           : DesignSystem::color().onPrimary());
     }
 }
 
@@ -230,15 +147,14 @@ void ScreenplayTextFastFormatWidget::designSystemChangeEvent(DesignSystemChangeE
 
     setBackgroundColor(DesignSystem::color().primary());
 
-    layout()->setContentsMargins(DesignSystem::layout().px8(),
-                                 DesignSystem::layout().px8(),
-                                 DesignSystem::layout().px8(),
-                                 DesignSystem::layout().px8());
+    layout()->setSpacing(Ui::DesignSystem::layout().px8());
+    layout()->setContentsMargins(DesignSystem::layout().px16(), DesignSystem::layout().px16(),
+                                 DesignSystem::layout().px16(), DesignSystem::layout().px16());
     for (auto button : d->buttons) {
         button->setBackgroundColor(ColorHelper::nearby(DesignSystem::color().primary()));
         button->setTextColor(button->property(kIsButtonCurrentTypeKey).toBool()
-                             ? DesignSystem::color().secondary()
-                             : DesignSystem::color().onPrimary());
+                                 ? DesignSystem::color().accent()
+                                 : DesignSystem::color().onPrimary());
     }
 }
 

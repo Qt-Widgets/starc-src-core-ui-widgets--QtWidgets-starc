@@ -2,17 +2,21 @@
 
 #include <corelib_global.h>
 
-class QString;
+#if (QT_VERSION > QT_VERSION_CHECK(6, 0, 0))
+#include <QtContainerFwd>
+#else
 class QStringList;
+#endif
+
+class QString;
 
 
-namespace BusinessLayer
-{
+namespace BusinessLayer {
 
 /**
  * @brief Парсер текста блока персонаж
  */
-class CORE_LIBRARY_EXPORT CharacterParser
+class CORE_LIBRARY_EXPORT ScreenplayCharacterParser
 {
 public:
     /**
@@ -22,15 +26,15 @@ public:
      */
     enum Section {
         SectionUndefined, //!< Неопределённое
-        SectionName,	  //!< ИМЯ
-        SectionState	  //!< СОСТОЯНИЕ
+        SectionName, //!< ИМЯ
+        SectionExtension //!< СОСТОЯНИЕ
     };
 
 public:
     /**
      * @brief Получить секцию блока
      */
-    static CharacterParser::Section section(const QString& _text);
+    static ScreenplayCharacterParser::Section section(const QString& _text);
 
     /**
      * @brief Получить имя персонажа
@@ -47,7 +51,7 @@ public:
 /**
  * @brief Парсер текста блока время и место
  */
-class CORE_LIBRARY_EXPORT SceneHeadingParser
+class CORE_LIBRARY_EXPORT ScreenplaySceneHeadingParser
 {
 public:
     /**
@@ -56,18 +60,18 @@ public:
      * @note [МЕСТО]. [ЛОКАЦИЯ] - [ВРЕМЯ], [ДЕНЬ ИСТОРИИ]
      */
     enum Section {
-        SectionUndefined,	 //!< Неопределённое
-        SectionSceneIntro,	 //!< МЕСТО
-        SectionLocation,	 //!< ЛОКАЦИЯ
-        SectionSceneTime,    //!< ВРЕМЯ
-        SectionStoryDay,	 //!< ДЕНЬ ИСТОРИИ
+        SectionUndefined, //!< Неопределённое
+        SectionSceneIntro, //!< МЕСТО
+        SectionLocation, //!< ЛОКАЦИЯ
+        SectionSceneTime, //!< ВРЕМЯ
+        SectionStoryDay, //!< ДЕНЬ ИСТОРИИ
     };
 
 public:
     /**
      * @brief Получить секцию блока
      */
-    static SceneHeadingParser::Section section(const QString& _text);
+    static ScreenplaySceneHeadingParser::Section section(const QString& _text);
 
     /**
      * @brief Получить название места
@@ -93,7 +97,7 @@ public:
 /**
  * @brief Парсер текста блока участники сцены
  */
-class CORE_LIBRARY_EXPORT SceneCharactersParser
+class CORE_LIBRARY_EXPORT ScreenplaySceneCharactersParser
 {
 public:
     /**

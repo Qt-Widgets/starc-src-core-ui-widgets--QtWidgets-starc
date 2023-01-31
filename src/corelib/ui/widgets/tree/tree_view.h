@@ -1,8 +1,8 @@
 #pragma once
 
-#include <corelib_global.h>
-
 #include <QTreeView>
+
+#include <corelib_global.h>
 
 
 /**
@@ -20,6 +20,11 @@ public:
      * @brief Установить необходимость пересчитывать размер элементов в делегате
      */
     void setAutoAdjustSize(bool _auto);
+
+    /**
+     * @brief Переопределяем метод, чтобы дать доступ к нему наружу
+     */
+    QSize viewportSizeHint() const override;
 
     /**
      * @brief Загрузить состояние дерева

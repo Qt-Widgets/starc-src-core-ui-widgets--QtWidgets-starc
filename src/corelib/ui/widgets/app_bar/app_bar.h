@@ -4,6 +4,24 @@
 
 
 /**
+ * @brief Уровень опций панели инструментов
+ */
+enum class AppBarOptionsLevel {
+    //
+    // Уровень приложения
+    //
+    App,
+    //
+    // Уровень навигатора
+    //
+    Navigation,
+    //
+    // Уровень редактора
+    //
+    View,
+};
+
+/**
  * @brief Виджет панели инструментов приложения
  */
 class CORE_LIBRARY_EXPORT AppBar : public Widget
@@ -15,6 +33,22 @@ public:
     ~AppBar() override;
 
     /**
+     * @brief Задать видимость красной точки для действия
+     */
+    void setBadgeVisible(QAction* _action, bool _visible);
+
+    /**
+     * @brief Задать действия для опций тулбара на заданном уровне
+     */
+    void setOptions(const QVector<QAction*>& _options, AppBarOptionsLevel _level);
+
+    /**
+     * @brief Очистить действия тулбара
+     */
+    void clearOptions(AppBarOptionsLevel _level);
+    void clearNavigatorOptions();
+
+    /**
      * @brief Сами определяем минимальный размер
      */
     QSize minimumSizeHint() const override;
@@ -23,7 +57,7 @@ protected:
     /**
      * @brief Переопределяем для отображения тултипов кнопок
      */
-    bool event(QEvent *_event) override;
+    bool event(QEvent* _event) override;
 
     /**
      * @brief Реализуем собственное рисование
@@ -39,6 +73,11 @@ protected:
      * @brief Переопределяем, чтобы активировать нажатую кнопку
      */
     void mouseReleaseEvent(QMouseEvent* _event) override;
+
+    /**
+     * @brief Обновить переводы
+     */
+    void updateTranslations() override;
 
     /**
      * @brief Переопределяем для обработки события смены дизайн-системы

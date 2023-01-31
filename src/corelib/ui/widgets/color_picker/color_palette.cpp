@@ -1,18 +1,17 @@
 #include "color_palette.h"
 
 #include <ui/design_system/design_system.h>
-
 #include <utils/helpers/color_helper.h>
 
-#include <QPainter>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QSettings>
 
 
 namespace {
-    const QString kColorsKey = QLatin1String("widgets/color-picker/colors");
-    const QString kColorsSeparator = QLatin1String(";");
-}
+const QString kColorsKey = QLatin1String("widgets/color-picker/colors");
+const QString kColorsSeparator = QLatin1String(";");
+} // namespace
 
 
 class ColorPallete::Implementation
@@ -23,20 +22,27 @@ public:
      */
     void buildPalette();
 
+    /**
+     * @brief Проверить, есть ли такой цвет в палитре
+     */
+    bool hasColor(const QColor& _color) const;
+
 
     struct ColorItem {
-        bool operator== (const ColorItem& _other) const {
-            return color == _other.color
-                    && rect == _other.rect;
+        bool operator==(const ColorItem& _other) const
+        {
+            return color == _other.color && rect == _other.rect;
         }
 
-        QColor color;
+        QColor color = QColor::Invalid;
         QRectF rect;
     };
     QVector<ColorItem> colorsPalette;
     ColorItem selectedColor;
     QVector<QColor> customColors;
     QRectF addCustomColorRect;
+
+    bool isColorCanBeDeslected = false;
 };
 
 
@@ -45,26 +51,19 @@ void ColorPallete::Implementation::buildPalette()
     colorsPalette.clear();
 
     const int colorRectColumns = 10;
-    const QSizeF colorRectSize = { Ui::DesignSystem::layout().px24(),
-                                   Ui::DesignSystem::layout().px24() };
+    const QSizeF colorRectSize
+        = { Ui::DesignSystem::layout().px24(), Ui::DesignSystem::layout().px24() };
     const qreal colorRectSpace = Ui::DesignSystem::layout().px4();
 
     //
     // Формируем первый ряд
     //
-    int topMargin = Ui::DesignSystem::layout().px12();
+    int topMargin = Ui::DesignSystem::layout().px24();
     int leftMargin = Ui::DesignSystem::layout().px12();
     QList<QColor> colors;
-    colors << QColor("#000000")
-           << QColor("#434343")
-           << QColor("#666666")
-           << QColor("#999999")
-           << QColor("#B7B7B7")
-           << QColor("#CCCCCC")
-           << QColor("#D9D9D9")
-           << QColor("#EFEFEF")
-           << QColor("#F3F3F3")
-           << QColor("#FFFFFF");
+    colors << QColor("#000000") << QColor("#434343") << QColor("#666666") << QColor("#999999")
+           << QColor("#B7B7B7") << QColor("#CCCCCC") << QColor("#D9D9D9") << QColor("#EFEFEF")
+           << QColor("#F3F3F3") << QColor("#FFFFFF");
     for (int column = 0; column < colorRectColumns; ++column) {
         QRectF colorRect;
         colorRect.setLeft(leftMargin);
@@ -75,63 +74,28 @@ void ColorPallete::Implementation::buildPalette()
 
         leftMargin += colorRectSize.width() + colorRectSpace;
     }
-    topMargin += colorRectSize.height() + Ui::DesignSystem::layout().px24();
+    topMargin += colorRectSize.height() + Ui::DesignSystem::layout().px48();
 
 
     //
     // Остальные ряды
     //
     colors.clear();
-    colors << QColor("#FE0000")
-           << QColor("#FF7401")
-           << QColor("#FFD302")
-           << QColor("#A0ED00")
-           << QColor("#01CC01")
-           << QColor("#06E3E4")
-           << QColor("#0046F4")
-           << QColor("#4F18FF")
-           << QColor("#9706E7")
-           << QColor("#EC0085") // ****
-           << QColor("#FE3235")
-           << QColor("#FF9036")
-           << QColor("#FFDB34")
-           << QColor("#B3F134")
-           << QColor("#35D533")
-           << QColor("#44D0D1")
-           << QColor("#4174F0")
-           << QColor("#653EE0")
-           << QColor("#A048CF")
-           << QColor("#F22B9E") // ****
-           << QColor("#FF686A")
-           << QColor("#FFAC66")
-           << QColor("#FCE364")
-           << QColor("#C6F567")
-           << QColor("#65DF66")
-           << QColor("#77DDE0")
-           << QColor("#7293F4")
-           << QColor("#8964EF")
-           << QColor("#B74EED")
-           << QColor("#F35EB2") // ****
-           << QColor("#FF999C")
-           << QColor("#FFC79C")
-           << QColor("#FFEC99")
-           << QColor("#DAF798")
-           << QColor("#99EB99")
-           << QColor("#B2F0F1")
-           << QColor("#94B3F6")
-           << QColor("#B29BF5")
-           << QColor("#CF92F4")
-           << QColor("#FE8ACA") // ****
-           << QColor("#F4CCCC")
-           << QColor("#FCE5CD")
-           << QColor("#FFF2CC")
-           << QColor("#D9EAD3")
-           << QColor("#CAFFCA")
-           << QColor("#BEFEFF")
-           << QColor("#B2CEFF")
-           << QColor("#CFBDF8")
-           << QColor("#E3B6FF")
-           << QColor("#FFAADA");
+    colors << QColor("#FE0000") << QColor("#FF7401") << QColor("#FFD302") << QColor("#00FF00")
+           << QColor("#01CC01") << QColor("#06E3E4") << QColor("#0046F4") << QColor("#4F18FF")
+           << QColor("#9706E7") << QColor("#FF00A5") // ****
+           << QColor("#FE3235") << QColor("#FF9036") << QColor("#FFDB34") << QColor("#A3FA14")
+           << QColor("#35D533") << QColor("#44D0D1") << QColor("#4174F0") << QColor("#653EE0")
+           << QColor("#A048CF") << QColor("#F22B9E") // ****
+           << QColor("#FF686A") << QColor("#FFAC66") << QColor("#FCE364") << QColor("#C6F567")
+           << QColor("#65DF66") << QColor("#77DDE0") << QColor("#7293F4") << QColor("#8964EF")
+           << QColor("#B74EED") << QColor("#F35EB2") // ****
+           << QColor("#FF999C") << QColor("#FFC79C") << QColor("#FFEC99") << QColor("#DAF798")
+           << QColor("#99EB99") << QColor("#B2F0F1") << QColor("#94B3F6") << QColor("#B29BF5")
+           << QColor("#CF92F4") << QColor("#FE8ACA") // ****
+           << QColor("#F4CCCC") << QColor("#FCE5CD") << QColor("#FFF2CC") << QColor("#D9EAD3")
+           << QColor("#CAFFCA") << QColor("#BEFEFF") << QColor("#B2CEFF") << QColor("#CFBDF8")
+           << QColor("#E3B6FF") << QColor("#FFAADA");
     const int colorRectRows = colors.size() / 10;
     for (int row = 0; row < colorRectRows; ++row) {
         leftMargin = Ui::DesignSystem::layout().px12();
@@ -148,12 +112,9 @@ void ColorPallete::Implementation::buildPalette()
         topMargin += colorRectSize.height() + colorRectSpace;
     }
 
-    topMargin += -colorRectSpace
-                 + Ui::DesignSystem::layout().px12()
-                 + Ui::DesignSystem::layout().px16()
-                 + Ui::DesignSystem::layout().px12();
+    topMargin += -colorRectSpace + Ui::DesignSystem::layout().px62();
     leftMargin = Ui::DesignSystem::layout().px12();
-    for (const auto& color : customColors) {
+    for (const auto& color : std::as_const(customColors)) {
         QRectF colorRect;
         colorRect.setLeft(leftMargin);
         colorRect.setTop(topMargin);
@@ -169,27 +130,40 @@ void ColorPallete::Implementation::buildPalette()
     addCustomColorRect.setSize(colorRectSize);
 }
 
+bool ColorPallete::Implementation::hasColor(const QColor& _color) const
+{
+    for (const auto& color : std::as_const(colorsPalette)) {
+        if (color.color == _color) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 
 // ****
 
 
 ColorPallete::ColorPallete(QWidget* _parent)
-    : Widget(_parent),
-      d(new Implementation)
+    : Widget(_parent)
+    , d(new Implementation)
 {
     setMouseTracking(true);
 
-    QSettings settings;
-    const auto customColors = settings.value(kColorsKey).toString().split(kColorsSeparator,
-                                                                          Qt::SkipEmptyParts);
+    const auto customColors
+        = QSettings().value(kColorsKey).toString().split(kColorsSeparator, Qt::SkipEmptyParts);
     for (const auto& color : customColors) {
         d->customColors.append(color);
     }
-
-    designSystemChangeEvent(nullptr);
 }
 
 ColorPallete::~ColorPallete() = default;
+
+void ColorPallete::setColorCanBeDeselected(bool _can)
+{
+    d->isColorCanBeDeslected = _can;
+}
 
 QColor ColorPallete::selectedColor() const
 {
@@ -202,27 +176,32 @@ void ColorPallete::setSelectedColor(const QColor& _color)
         return;
     }
 
-    for (const auto& color : d->colorsPalette) {
-        if (color.color != _color) {
-            continue;
+    if (!_color.isValid()) {
+        d->selectedColor = {};
+    } else {
+        if (!d->hasColor(_color)) {
+            addCustomColor(_color);
         }
 
-        d->selectedColor = color;
-        break;
+        for (const auto& color : std::as_const(d->colorsPalette)) {
+            if (color.color != _color) {
+                continue;
+            }
+            d->selectedColor = color;
+            break;
+        }
     }
 
     update();
 }
 
-void ColorPallete::addCustormColor(const QColor& _color)
+void ColorPallete::addCustomColor(const QColor& _color)
 {
-    const auto colorInRgb = _color.toRgb();
-
     //
     // Если такой цвет уже есть, переместим его в конец
     //
-    if (d->customColors.contains(colorInRgb)) {
-        d->customColors.move(d->customColors.indexOf(colorInRgb), d->customColors.size() - 1);
+    if (d->customColors.contains(_color)) {
+        d->customColors.move(d->customColors.indexOf(_color), d->customColors.size() - 1);
     }
     //
     // Если же цвета не было, то добавим его в пределах допустимой нормы цветов
@@ -232,21 +211,20 @@ void ColorPallete::addCustormColor(const QColor& _color)
         if (d->customColors.size() == maxColorsSize) {
             d->customColors.removeFirst();
         }
-        d->customColors.append(colorInRgb);
+        d->customColors.append(_color);
     }
 
     //
     // Сохраним цвета
     //
-    QSettings settings;
     const QString colorsValue = [colors = d->customColors] {
         QString colorsText;
         for (const auto& color : colors) {
             colorsText.append(color.name() + kColorsSeparator);
         }
         return colorsText;
-    } ();
-    settings.setValue(kColorsKey, colorsValue);
+    }();
+    QSettings().setValue(kColorsKey, colorsValue);
 
     //
     // Обновим внешний вид
@@ -267,13 +245,14 @@ void ColorPallete::paintEvent(QPaintEvent* _event)
 
     Q_UNUSED(_event);
 
-    QPainter painter( this );
+    QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
     //
     // Рисуем кружки с цветами
     //
-    const QColor smoothTextColor = ColorHelper::transparent(textColor(), Ui::DesignSystem::hoverBackgroundOpacity());
+    const QColor smoothTextColor
+        = ColorHelper::transparent(textColor(), Ui::DesignSystem::hoverBackgroundOpacity());
     const QPoint mousePos = mapFromGlobal(QCursor::pos());
     for (const auto& color : std::as_const(d->colorsPalette)) {
         //
@@ -289,7 +268,10 @@ void ColorPallete::paintEvent(QPaintEvent* _event)
         if (color == d->selectedColor) {
             painter.setPen(ColorHelper::contrasted(color.color));
             painter.setFont(Ui::DesignSystem::font().iconsSmall());
-            painter.drawText(color.rect, Qt::AlignCenter, u8"\U000F0E1E");
+            painter.drawText(color.rect, Qt::AlignCenter,
+                             d->isColorCanBeDeslected && color.rect.contains(mousePos)
+                                 ? u8"\U000F0156"
+                                 : u8"\U000F012C");
         }
 
         //
@@ -297,7 +279,8 @@ void ColorPallete::paintEvent(QPaintEvent* _event)
         //
         if (color.rect.contains(mousePos)) {
             const auto adjustSize = Ui::DesignSystem::layout().px2();
-            const auto borderRect = color.rect.adjusted(-adjustSize, -adjustSize, adjustSize, adjustSize);
+            const auto borderRect
+                = color.rect.adjusted(-adjustSize, -adjustSize, adjustSize, adjustSize);
             painter.setBrush(Qt::NoBrush);
             painter.setPen(QPen(color.color, 1.0 * Ui::DesignSystem::scaleFactor()));
             painter.drawEllipse(borderRect);
@@ -307,7 +290,8 @@ void ColorPallete::paintEvent(QPaintEvent* _event)
     //
     // Разделитель между верхней и центральной
     //
-    const QRectF dividerRect(0, Ui::DesignSystem::layout().px48(), width(), Ui::DesignSystem::scaleFactor());
+    const QRectF dividerRect(0, Ui::DesignSystem::layout().px(72), width(),
+                             Ui::DesignSystem::scaleFactor());
     painter.fillRect(dividerRect, smoothTextColor);
 
     //
@@ -318,10 +302,11 @@ void ColorPallete::paintEvent(QPaintEvent* _event)
     painter.setPen(QPen(textColor(), Ui::DesignSystem::layout().px2()));
     painter.setBrush(Qt::NoBrush);
     painter.setFont(Ui::DesignSystem::font().button());
-    const qreal otherColorsLabelTop = (12 + 24 + 12
-                                       + 12 + 24*5 + 4*4 + 12) * Ui::DesignSystem::scaleFactor();
+    const qreal otherColorsLabelTop
+        = (24 + 24 + 24 + 24 + 24 * 5 + 4 * 4 + 24) * Ui::DesignSystem::scaleFactor();
     const QRectF otherColorsLabelRect(Ui::DesignSystem::layout().px12(), otherColorsLabelTop,
-                                      width() - Ui::DesignSystem::layout().px24(), Ui::DesignSystem::layout().px16());
+                                      width() - Ui::DesignSystem::layout().px24(),
+                                      Ui::DesignSystem::layout().px16());
     painter.drawText(otherColorsLabelRect, Qt::AlignLeft | Qt::AlignVCenter, tr("User colors"));
     //
     // ... кнопка добавления
@@ -346,13 +331,17 @@ void ColorPallete::mousePressEvent(QMouseEvent* _event)
         return;
     }
 
-    for (const auto& color : d->colorsPalette) {
+    for (const auto& color : std::as_const(d->colorsPalette)) {
         if (!color.rect.contains(_event->pos())) {
             continue;
         }
 
-        d->selectedColor = color;
-        emit colorSelected(color.color);
+        if (d->isColorCanBeDeslected && d->selectedColor == color) {
+            d->selectedColor = {};
+        } else {
+            d->selectedColor = color;
+        }
+        emit selectedColorChanged(d->selectedColor.color);
 
         update();
 

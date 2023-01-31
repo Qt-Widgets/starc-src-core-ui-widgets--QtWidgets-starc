@@ -17,6 +17,11 @@ public:
     ~ScreenplayTextSearchToolbar() override;
 
     /**
+     * @brief Настроить режим редактирования
+     */
+    void setReadOnly(bool _readOnly);
+
+    /**
      * @brief Возвращаем фокус после поиска
      */
     void refocus();
@@ -79,12 +84,18 @@ signals:
 
 protected:
     /**
-     * @brief Ловим событие изменения размера родительского виджета, чтобы скорректировать свои размеры
+     * @brief Ловим событие изменения размера родительского виджета, чтобы скорректировать свои
+     * размеры
      *        + события потери фокуса для скрытия попапа
      *        + события нажатия ENTER в поле поиска
      *        + события нажатия ESCAPE в поле поиска
      */
     bool eventFilter(QObject* _watched, QEvent* _event) override;
+
+    /**
+     * @brief Переопределяем для более красивой работы с выпадающими списками
+     */
+    bool canAnimateHoverOut() const override;
 
     /**
      * @brief Корректируем цвета вложенных виджетов

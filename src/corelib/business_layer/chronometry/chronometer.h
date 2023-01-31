@@ -1,35 +1,48 @@
 #pragma once
 
-#include <corelib_global.h>
-
 #include <chrono>
+#include <corelib_global.h>
 
 class QTextBlock;
 
 
-namespace BusinessLayer
-{
+namespace BusinessLayer {
 
-enum class ScreenplayParagraphType;
+enum class TextParagraphType;
 
 /**
  * @brief Тип счётчика хронометража
  */
 enum class CORE_LIBRARY_EXPORT ChronometerType {
     Page,
-    Characters
+    Characters,
+    Configurable,
 };
 
 /**
  * @brief Фасад для вычисления хронометража способом, настроенным пользователем
  */
-class CORE_LIBRARY_EXPORT Chronometer
+class CORE_LIBRARY_EXPORT ScreenplayChronometer
 {
 public:
     /**
      * @brief Определить длительность заданного блока
      */
-    static std::chrono::milliseconds duration(ScreenplayParagraphType _type, const QString& _text);
+    static std::chrono::milliseconds duration(TextParagraphType _type, const QString& _text,
+                                              const QString& _templateId);
+};
+
+/**
+ * @brief Фасад для вычисления хронометража способом, настроенным пользователем
+ */
+class CORE_LIBRARY_EXPORT AudioplayChronometer
+{
+public:
+    /**
+     * @brief Определить длительность заданного блока
+     */
+    static std::chrono::milliseconds duration(TextParagraphType _type, const QString& _text,
+                                              const QString& _templateId);
 };
 
 } // namespace BusinessLayer

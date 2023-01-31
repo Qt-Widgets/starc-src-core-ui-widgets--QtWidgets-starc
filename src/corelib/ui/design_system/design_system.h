@@ -1,9 +1,9 @@
 #pragma once
 
-#include <corelib_global.h>
-
 #include <QLocale>
 #include <QScopedPointer>
+
+#include <corelib_global.h>
 
 class QColor;
 class QFont;
@@ -13,17 +13,15 @@ class QPointF;
 class QSizeF;
 
 
-namespace Ui
-{
+namespace Ui {
 /**
  * @brief Тема приложения
  */
-enum class ApplicationTheme
-{
+enum class ApplicationTheme {
     Dark,
     Light,
     DarkAndLight,
-    Custom
+    Custom,
 };
 
 /**
@@ -42,7 +40,7 @@ public:
     class CORE_LIBRARY_EXPORT Color
     {
     public:
-        explicit Color(const Color& _rhs);
+        Color(const Color& _rhs);
         explicit Color(const QString& _color);
         ~Color();
         Color& operator=(const Color& _rhs);
@@ -50,30 +48,36 @@ public:
         QString toString() const;
 
         const QColor& primary() const;
-        const QColor& secondary() const;
+        const QColor& accent() const;
         const QColor& background() const;
         const QColor& surface() const;
         const QColor& error() const;
         const QColor& shadow() const;
         const QColor& onPrimary() const;
-        const QColor& onSecondary() const;
+        const QColor& onAccent() const;
         const QColor& onBackground() const;
         const QColor& onSurface() const;
         const QColor& onError() const;
         const QColor& onShadow() const;
 
+        const QColor& textEditor() const;
+        const QColor& onTextEditor() const;
+
         void setPrimary(const QColor& _color);
-        void setSecondary(const QColor& _color);
+        void setAccent(const QColor& _color);
         void setBackground(const QColor& _color);
         void setSurface(const QColor& _color);
         void setError(const QColor& _color);
         void setShadow(const QColor& _color);
         void setOnPrimary(const QColor& _color);
-        void setOnSecondary(const QColor& _color);
+        void setOnAccent(const QColor& _color);
         void setOnBackground(const QColor& _color);
         void setOnSurface(const QColor& _color);
         void setOnError(const QColor& _color);
         void setOnShadow(const QColor& _color);
+
+        void setTextEditor(const QColor& _color);
+        void setOnTextEditor(const QColor& _color);
 
     private:
         Color();
@@ -90,6 +94,11 @@ public:
     {
     public:
         ~Font();
+
+        /**
+         * @brief Получить список недостающих шрифтов для корректной работы приложения
+         */
+        QVector<QString> missedFonts() const;
 
         const QFont& h1() const;
         const QFont& h2() const;
@@ -108,7 +117,12 @@ public:
         // Cheat sheet - https://cdn.materialdesignicons.com/5.2.45/
         const QFont& iconsSmall() const;
         const QFont& iconsMid() const;
+        const QFont& iconsBig() const;
         const QFont& iconsForEditors() const;
+
+        // Cheat sheet - https://fontawesome.com/v5/cheatsheet/free/brands
+        const QFont& brandsMid() const;
+        const QFont& brandsBig() const;
 
     private:
         explicit Font(qreal _scaleFactor);
@@ -125,6 +139,11 @@ public:
     {
     public:
         ~Layout();
+
+        /**
+         * @brief Расстояние с заданным кол-вом пикселей
+         */
+        qreal px(qreal _value = 1.0) const;
 
         /**
          * @brief Отступ в 2 пикселя
@@ -241,6 +260,27 @@ public:
         explicit AppBar(qreal _scaleFactor);
         friend class DesignSystemPrivate;
         //
+        class Implementation;
+        QScopedPointer<Implementation> d;
+    };
+
+    /**
+     * @brief Параметры контекстного меню
+     */
+    class CORE_LIBRARY_EXPORT ContextMenu
+    {
+    public:
+        ~ContextMenu();
+
+        /**
+         * @brief Отступы контента
+         */
+        const QMarginsF& margins() const;
+
+    private:
+        explicit ContextMenu(qreal _scaleFactor);
+        friend class DesignSystemPrivate;
+
         class Implementation;
         QScopedPointer<Implementation> d;
     };
@@ -431,6 +471,37 @@ public:
     };
 
     /**
+     * @brief Параметры виджета переключателя
+     */
+    class CORE_LIBRARY_EXPORT Toggle
+    {
+    public:
+        ~Toggle();
+
+        /**
+         * @brief Размер трека
+         */
+        QSizeF trackSize() const;
+
+        /**
+         * @brief Размер пипки
+         */
+        QSizeF tumblerSize() const;
+
+        /**
+         * @brief На сколько тумблер выходит на пределы трека
+         */
+        qreal tumblerOverflow() const;
+
+    private:
+        explicit Toggle(qreal _scaleFactor);
+        friend class DesignSystemPrivate;
+        //
+        class Implementation;
+        QScopedPointer<Implementation> d;
+    };
+
+    /**
      * @brief Параметры виджета слайдера
      */
     class CORE_LIBRARY_EXPORT Slider
@@ -529,6 +600,11 @@ public:
          * @brief Отступы вокруг текста
          */
         QMarginsF margins(bool _withTitle = true) const;
+
+        /**
+         * @brief Радиус скругления верхних углов
+         */
+        qreal borderRadius() const;
 
         /**
          * @brief Координата отрисовки лейбла
@@ -690,12 +766,18 @@ public:
         qreal heightWithText() const;
         qreal heightWithIcon() const;
         qreal heightWithTextAndIcon() const;
+        qreal heightWithTextAndLeadingIcon() const;
         /** @} */
 
         /**
          * @brief Отступы вокруг
          */
         QMarginsF margins() const;
+
+        /**
+         * @brief Отступ между иконкой и текстом
+         */
+        qreal spacing() const;
 
         /**
          * @brief Размер иконки
@@ -807,11 +889,6 @@ public:
         QMarginsF selectionMargins() const;
 
         /**
-         * @brief Отступ от подзаголовка до первого пункта меню
-         */
-        qreal subtitleBottomMargin() const;
-
-        /**
          * @brief Отступ от иконки до текста пункта меню
          */
         qreal spacing() const;
@@ -820,16 +897,6 @@ public:
          * @brief Ширина
          */
         qreal width() const;
-
-        /**
-         * @brief Высота заголовка
-         */
-        qreal titleHeight() const;
-
-        /**
-         * @brief Высота подзаголовка
-         */
-        qreal subtitleHeight() const;
 
         /**
          * @brief Высота пункта меню
@@ -999,7 +1066,7 @@ public:
         /**
          * @brief Максимальная ширина информационного диалога
          */
-        qreal infoMaximumWidth() const;
+        qreal maximumWidth() const;
 
     private:
         explicit Dialog(qreal _scaleFactor);
@@ -1025,7 +1092,8 @@ public:
         /**
          * @brief Ширина панели
          */
-        qreal width() const;
+        qreal minimumWidth() const;
+        qreal maximumWidth() const;
 
         /**
          * @brief Высота одного процесса
@@ -1081,6 +1149,64 @@ public:
         QScopedPointer<Implementation> d;
     };
 
+    /**
+     * @brief Параметры карточки персонажа
+     */
+    class CORE_LIBRARY_EXPORT CharacterCard
+    {
+    public:
+        ~CharacterCard();
+
+        /**
+         * @brief Получить размер карточки
+         */
+        const QSizeF& primarySize() const;
+        const QSizeF& secondarySize() const;
+        const QSizeF& tertiarySize() const;
+        const QSizeF& undefinedSize() const;
+
+        /**
+         * @brief Расстояние между аватаром и текстом
+         */
+        qreal spacing() const;
+
+    private:
+        explicit CharacterCard(qreal _scaleFactor);
+        friend class DesignSystemPrivate;
+        //
+        class Implementation;
+        QScopedPointer<Implementation> d;
+    };
+
+    /**
+     * @brief Параметры карточки локации
+     */
+    class CORE_LIBRARY_EXPORT LocationCard
+    {
+    public:
+        ~LocationCard();
+
+        /**
+         * @brief Получить размер карточки
+         */
+        const QSizeF& primarySize() const;
+        const QSizeF& secondarySize() const;
+        const QSizeF& tertiarySize() const;
+        const QSizeF& undefinedSize() const;
+
+        /**
+         * @brief Расстояние между аватаром и текстом
+         */
+        qreal spacing() const;
+
+    private:
+        explicit LocationCard(qreal _scaleFactor);
+        friend class DesignSystemPrivate;
+        //
+        class Implementation;
+        QScopedPointer<Implementation> d;
+    };
+
 public:
     /**
      * @brief Текущая тема
@@ -1123,6 +1249,11 @@ public:
     static qreal inactiveTextOpacity();
 
     /**
+     * @brief Прозрачность неактивного элемента
+     */
+    static qreal inactiveItemOpacity();
+
+    /**
      * @brief Прозрачность недоступного текста
      */
     static qreal disabledTextOpacity();
@@ -1150,6 +1281,7 @@ public:
      * @brief Параметры цвета приложения
      */
     static const Color& color();
+    static Color color(ApplicationTheme _forTheme);
     static void setColor(const Color& _color);
 
     /**
@@ -1173,6 +1305,11 @@ public:
     static const Label& label();
 
     /**
+     * @brief Параметры контестного меню
+     */
+    static const ContextMenu& contextMenu();
+
+    /**
      * @brief Параметры кнопки
      */
     static const Button& button();
@@ -1191,6 +1328,11 @@ public:
      * @brief Параметры флажка
      */
     static const CheckBox& checkBox();
+
+    /**
+     * @brief Параметры переключателя
+     */
+    static const Toggle& toggle();
 
     /**
      * @brief Параметры слайдера
@@ -1266,6 +1408,16 @@ public:
      * @brief Параметры карточки проекта
      */
     static const ProjectCard& projectCard();
+
+    /**
+     * @brief Параметры карточки персонажа
+     */
+    static const CharacterCard& characterCard();
+
+    /**
+     * @brief Параметры карточки локации
+     */
+    static const LocationCard& locationCard();
 
 public:
     ~DesignSystem();

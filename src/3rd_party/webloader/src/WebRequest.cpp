@@ -18,7 +18,7 @@
 #include "WebRequest.h"
 #include "HttpMultiPart.h"
 
-
+#include <QDebug>
 #include <QFile>
 #include <QStringList>
 #include <QSslConfiguration>
@@ -41,7 +41,7 @@ namespace {
     /**
      * @brief Boundary для разделения атрибутов запроса, при использовании  multi-part form data
      */
-    const QString kBoundary = "---------------------------7d935033608e2";
+    const QByteArray kBoundary = "---------------------------7d935033608e2";
 
     /**
      * @brief ContentType запроса по-умолчанию

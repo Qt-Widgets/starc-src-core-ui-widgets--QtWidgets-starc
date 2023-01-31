@@ -1,5 +1,6 @@
 #pragma once
 
+#include <interfaces/ui/i_document_view.h>
 #include <ui/widgets/widget/widget.h>
 
 
@@ -7,19 +8,37 @@ namespace BusinessLayer {
 class ScreenplayTextModel;
 }
 
-namespace Ui
-{
+namespace Ui {
+class DictionariesView;
 
 /**
  * @brief Представление редактора документа сценария
  */
-class ScreenplayTextView : public Widget
+class ScreenplayTextView : public Widget, public IDocumentView
 {
     Q_OBJECT
 
 public:
     explicit ScreenplayTextView(QWidget* _parent = nullptr);
     ~ScreenplayTextView() override;
+
+    /**
+     * @brief Реализация интерфейса IDocumentView
+     */
+    /** @{ */
+    QWidget* asQWidget() override;
+    void toggleFullScreen(bool _isFullScreen) override;
+    QVector<QAction*> options() const override;
+    void setEditingMode(ManagementLayer::DocumentEditingMode _mode) override;
+    void setCursors(const QVector<Domain::CursorInfo>& _cursors) override;
+    void setCurrentModelIndex(const QModelIndex& _index) override;
+    void setGeneratedText(const QString& _text) override;
+    /** @} */
+
+    /**
+     * @brief Представление редактора справочников
+     */
+    DictionariesView* dictionariesView() const;
 
     /**
      * @brief Настроить редактор сценария в соответствии с параметрами заданными в настройках
@@ -43,21 +62,50 @@ public:
     QModelIndex currentModelIndex() const;
 
     /**
-     * @brief Поставить курсор в позицию элемента с заданным индексом модели сценария
-     */
-    void setCurrentModelIndex(const QModelIndex& _index);
-
-    /**
      * @brief Позиция курсора
      */
     int cursorPosition() const;
     void setCursorPosition(int _position);
+
+    /**
+     * @brief Положение прокрутки
+     */
+    int verticalScroll() const;
+    void setVerticalScroll(int _value);
 
 signals:
     /**
      * @brief Изменился индекс текущего элемента модели в текстовом документе (перестился курсор)
      */
     void currentModelIndexChanged(const QModelIndex& _index);
+
+    /**
+     * @brief Нажатия пользователя в контекстном меню для активации действия
+     */
+    void addBookmarkRequested();
+    void editBookmarkRequested();
+
+    /**
+     * @brief Уведомления, что пользователь осуществил действие в панели редактирования закладки
+     */
+    void createBookmarkRequested(const QString& _text, const QColor& _color);
+    void changeBookmarkRequested(const QModelIndex& _index, const QString& _text,
+                                 const QColor& _color);
+
+    /**
+     * @brief Пользователь хочет удалить закладку
+     */
+    void removeBookmarkRequested();
+
+    /**
+     * @brief Изменилась позиция курсора
+     */
+    void cursorChanged(const QByteArray& _cursorData);
+
+    /**
+     * @brief Запрос на генерацию текста
+     */
+    void generateTextRequested(const QString& _text);
 
 protected:
     /**

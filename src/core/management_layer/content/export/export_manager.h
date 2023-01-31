@@ -6,8 +6,7 @@ namespace BusinessLayer {
 class AbstractModel;
 }
 
-namespace ManagementLayer
-{
+namespace ManagementLayer {
 
 /**
  * @brief Управляющий экспортом документов
@@ -28,6 +27,11 @@ public:
      * @brief Экспортировать заданный документ
      */
     void exportDocument(BusinessLayer::AbstractModel* _model);
+
+    /**
+     * @brief Экспортировать заданный документ в заданный файл
+     */
+    void exportDocument(BusinessLayer::AbstractModel* _model, const QString& _filePath);
 
 private:
     class Implementation;

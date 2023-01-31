@@ -18,7 +18,7 @@ public:
         Fade,
         FadeThrough,
         Slide,
-        Expand
+        Expand,
     };
 
 public:
@@ -26,8 +26,8 @@ public:
     ~StackWidget() override;
 
     /**
-      * @brief Установить тип анимации виджета
-      */
+     * @brief Установить тип анимации виджета
+     */
     void setAnimationType(AnimationType _type);
 
     /**
@@ -41,6 +41,11 @@ public:
      * @note При этом виджет не делается текущим
      */
     void addWidget(QWidget* _widget);
+
+    /**
+     * @brief Содержится ли заданный виджет в стэке
+     */
+    bool containsWidget(QWidget* _widget);
 
     /**
      * @brief Сделать заданный виджет текущим
@@ -57,12 +62,18 @@ public:
      */
     QSize sizeHint() const override;
 
-protected:
     /**
      * @brief Длительность анимации
      */
     int animationDuration() const;
 
+signals:
+    /**
+     * @brief Сменился текущий виджет
+     */
+    void currentWidgetChanged();
+
+protected:
     /**
      * @brief Реализуем собственную отрисовку для реализации эффекста смены текущего виджета
      */
@@ -72,6 +83,11 @@ protected:
      * @brief Реализацем собственную отрисовку, чтобы корректировать размер вложенных виджетов
      */
     void resizeEvent(QResizeEvent* _event) override;
+
+    /**
+     * @brief Отлавливаем запрос на перекомпоновку и прокидываем его выше
+     */
+    bool eventFilter(QObject* _watched, QEvent* _event) override;
 
 private:
     class Implementation;

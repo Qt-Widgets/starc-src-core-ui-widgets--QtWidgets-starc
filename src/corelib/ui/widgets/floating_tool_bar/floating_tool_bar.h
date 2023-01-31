@@ -20,6 +20,17 @@ public:
     void setOrientation(Qt::Orientation _orientation);
 
     /**
+     * @brief Задать режим отрисовки в виде шторки (true) или плавающей панели (false)
+     * @default false
+     */
+    void setCurtain(bool _curtain);
+
+    /**
+     * @brief Задать стартовую прозрачность
+     */
+    void setStartOpacity(qreal _opacity);
+
+    /**
      * @brief Задать ширину области для отрисовки действия
      */
     void setActionCustomWidth(QAction* _action, int _width);
@@ -51,9 +62,19 @@ protected:
     void setActionColor(QAction* _action, const QColor& _color);
 
     /**
+     * @brief Можно ли анимировать эффект покидания курсора из панели
+     */
+    virtual bool canAnimateHoverOut() const;
+
+    /**
+     * @brief Анимировать эффект покадания курсора из панели
+     */
+    void animateHoverOut();
+
+    /**
      * @brief Переопределяем для отображения тултипов кнопок
      */
-    bool event(QEvent *_event) override;
+    bool event(QEvent* _event) override;
 
     /**
      * @brief Реализуем собственное рисование
@@ -68,7 +89,11 @@ protected:
     /**
      * @brief Переопределяем для реализации эффекта поднятия виджета при ховере
      */
+#if (QT_VERSION > QT_VERSION_CHECK(6, 0, 0))
+    void enterEvent(QEnterEvent* _event) override;
+#else
     void enterEvent(QEvent* _event) override;
+#endif
     void leaveEvent(QEvent* _event) override;
 
     /**

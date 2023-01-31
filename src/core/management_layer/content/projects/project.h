@@ -3,8 +3,13 @@
 #include <QAbstractListModel>
 
 
-namespace ManagementLayer
-{
+namespace Domain {
+struct ProjectCollaboratorInfo;
+}
+
+namespace ManagementLayer {
+
+enum class DocumentEditingMode;
 
 /**
  * @brief Тип проекта
@@ -12,7 +17,8 @@ namespace ManagementLayer
 enum class ProjectType {
     Invalid,
     Local,
-    Remote
+    LocalShadow,
+    Cloud,
 };
 
 /**
@@ -24,7 +30,7 @@ enum ProjectDataRole {
     PosterPath,
     Name,
     Logline,
-    LastEditTime
+    LastEditTime,
 };
 
 /**
@@ -58,11 +64,16 @@ public:
     void setType(ProjectType _type);
 
     /**
-     * @brief Путь к проекту
+     * @brief Путь к исходному файлу проекта
      */
-    QString displayPath() const;
     QString path() const;
     void setPath(const QString& _path);
+
+    /**
+     * @brief Доподлинный путь к проекту
+     */
+    QString realPath() const;
+    void setRealPath(const QString& _path);
 
     /**
      * @brief Путь к постеру проекта
@@ -70,6 +81,12 @@ public:
     const QPixmap& poster() const;
     QString posterPath() const;
     void setPosterPath(const QString& _path);
+
+    /**
+     * @brief Идентификатор проекта
+     */
+    QUuid uuid() const;
+    void setUuid(const QUuid& _uuid);
 
     /**
      * @brief Название проекта
@@ -91,10 +108,41 @@ public:
     void setLastEditTime(const QDateTime& _time);
 
     /**
+     * @brief Можно ли показывать диалог с вопросом о смене типа теневого проекта
+     */
+    bool canAskAboutSwitch() const;
+    void setCanAskAboutSwitch(bool _can);
+
+    /**
+     * @brief Может ли проект быть синхронизированным
+     */
+    bool canBeSynced() const;
+    void setCanBeSynced(bool _can);
+
+    /**
      * @brief Идентификатор проекта
      */
     int id() const;
     void setId(int _id);
+
+    /**
+     * @brief Является ли текущий пользователь владельцем проекта
+     */
+    bool isOwner() const;
+    void setOwner(bool _isOwner);
+
+    /**
+     * @brief Режим работы с проектом
+     */
+    DocumentEditingMode editingMode() const;
+    void setEditingMode(DocumentEditingMode _mode);
+    bool isReadOnly() const;
+
+    /**
+     * @brief Список соавторов
+     */
+    QVector<Domain::ProjectCollaboratorInfo> collaborators() const;
+    void setCollaborators(const QVector<Domain::ProjectCollaboratorInfo>& _collaborators);
 
     /**
      * @brief Получить данные по роли из модели

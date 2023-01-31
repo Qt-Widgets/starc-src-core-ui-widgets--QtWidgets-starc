@@ -3,8 +3,7 @@
 #include <ui/widgets/dialog/abstract_dialog.h>
 
 
-namespace Ui
-{
+namespace Ui {
 
 /**
  * @brief Диалог создания нового проекта
@@ -18,19 +17,10 @@ public:
     ~CreateProjectDialog() override;
 
     /**
-     * @brief Настроить возможность создавать проекты в облаке
+     * @brief Тип проекта
      */
-    void configureCloudProjectCreationAbility(bool _isLogged, bool _isSubscriptionActive);
-
-    /**
-     * @brief Задать папку, куда будет сохраняться новый проект
-     */
-    void setProjectFolder(const QString& _path);
-
-    /**
-     * @brief Задать папку из которой будут выбираться проекты для импорта
-     */
-    void setImportFolder(const QString& _path);
+    int projectType() const;
+    void setProjectType(int _type);
 
     /**
      * @brief Название нового проекта
@@ -38,19 +28,27 @@ public:
     QString projectName() const;
 
     /**
+     * @brief Папка, куда будет сохраняться новый проект
+     */
+    QString projectFolder() const;
+    void setProjectFolder(const QString& _path);
+
+    /**
+     * @brief Папка, из которой будут выбираться проекты для импорта
+     */
+    QString importFilePath() const;
+    void setImportFolder(const QString& _path);
+
+    /**
+     * @brief Настроить возможность создавать проекты в облаке
+     */
+    void configureCloudProjectCreationAbility(bool _isConnected, bool _isLogged,
+                                              bool _isSubscriptionActive);
+
+    /**
      * @brief Где пользователь хочет разместить проект true - локально, false - в облаке
      */
     bool isLocal() const;
-
-    /**
-     * @brief Папка для размещения нового проекта
-     */
-    QString projectFolder() const;
-
-    /**
-     * @brief Путь до файла для импорта
-     */
-    QString importFilePath() const;
 
 signals:
     /**

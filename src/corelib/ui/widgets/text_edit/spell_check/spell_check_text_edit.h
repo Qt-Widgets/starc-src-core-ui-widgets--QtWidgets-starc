@@ -4,6 +4,19 @@
 
 class SpellCheckHighlighter;
 
+/**
+ * @brief Политика обновления состояние проверки орфографии
+ */
+enum class SpellCheckPolicy {
+    //
+    // Автоматическое обновление, как реакция на соответствующее событие
+    //
+    Auto,
+    //
+    // Ручное управление, только через метод класса
+    //
+    Manual,
+};
 
 /**
  * @brief Класс текстового редактора с проверкой орфографии
@@ -15,6 +28,12 @@ class CORE_LIBRARY_EXPORT SpellCheckTextEdit : public PageTextEdit
 public:
     explicit SpellCheckTextEdit(QWidget* _parent = nullptr);
     ~SpellCheckTextEdit() override;
+
+    /**
+     * @brief Задать политику обновления состояния проверки орфографии
+     * @default Auto
+     */
+    void setSpellCheckPolicy(SpellCheckPolicy _policy);
 
     /**
      * @brief Включить/выключить проверку правописания
@@ -36,11 +55,31 @@ public:
      */
     void prepareToClear() override;
 
+    /**
+     * @brief Находится ли ошибочное слово под курсором
+     */
+    bool isMispelledWordUnderCursor(const QPoint& _position) const;
+
+    /**
+     * @brief Добавляем опции проверки орфографии в контекстное меню
+     */
+    ContextMenu* createContextMenu(const QPoint& _position, QWidget* _parent = nullptr) override;
+
 protected:
+    /**
+     * @brief Игнорировать заданное слово
+     */
+    void ignoreWord(const QString& _word);
+
     /**
      * @brief Пересоздание подсвечивающего класса
      */
     void setHighlighterDocument(QTextDocument* _document);
+
+    /**
+     * @brief Добавляем реакцию на событие включения/отключения проверки орфографии
+     */
+    bool event(QEvent* _event) override;
 
 private:
     /**

@@ -5,8 +5,7 @@
 class QStringListModel;
 
 
-namespace KeyProcessingLayer
-{
+namespace KeyProcessingLayer {
 
 /**
  * @brief Класс выполняющий обработку нажатия клавиш в блоке переход
@@ -16,6 +15,11 @@ class TransitionHandler : public StandardKeyHandler
 public:
     explicit TransitionHandler(Ui::ScreenplayTextEdit* _editor);
 
+    /**
+     * @brief При входе в блок, сразу покажем подсказку
+     */
+    void prehandle() override;
+
 protected:
     /**
      * @brief Реализация интерфейса AbstractKeyHandler
@@ -23,6 +27,7 @@ protected:
     /** @{ */
     void handleEnter(QKeyEvent* _event = nullptr) override;
     void handleTab(QKeyEvent* _event = nullptr) override;
+    void handleBackspace(QKeyEvent* _event = nullptr) override;
     void handleOther(QKeyEvent* _event = nullptr) override;
     void handleInput(QInputMethodEvent* _event) override;
     /** @} */
@@ -43,6 +48,11 @@ private:
      * @brief Модель переходов
      */
     QStringListModel* m_completerModel = nullptr;
+
+    /**
+     * @brief Можно ли показать подсказку
+     */
+    bool m_completionAllowed = true;
 };
 
 } // namespace KeyProcessingLayer

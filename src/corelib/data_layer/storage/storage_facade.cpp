@@ -5,8 +5,7 @@
 #include "settings_storage.h"
 
 
-namespace DataStorageLayer
-{
+namespace DataStorageLayer {
 
 void StorageFacade::clearStorages()
 {
@@ -45,3 +44,33 @@ DocumentStorage* StorageFacade::s_documentStorage = nullptr;
 SettingsStorage* StorageFacade::s_settingsStorage = nullptr;
 
 } // namespace DataStorageLayer
+
+
+QVariant settingsValue(const QString& _key)
+{
+    return settingsValue(_key, {});
+}
+
+QVariant settingsValue(const QString& _key, const QVariant& _defaultValue)
+{
+    return DataStorageLayer::StorageFacade::settingsStorage()->value(
+        _key, DataStorageLayer::SettingsStorage::SettingsPlace::Application, _defaultValue);
+}
+
+QVariantMap settingsValues(const QString& _key)
+{
+    return DataStorageLayer::StorageFacade::settingsStorage()->values(
+        _key, DataStorageLayer::SettingsStorage::SettingsPlace::Application);
+}
+
+void setSettingsValue(const QString& _key, const QVariant& _value)
+{
+    DataStorageLayer::StorageFacade::settingsStorage()->setValue(
+        _key, _value, DataStorageLayer::SettingsStorage::SettingsPlace::Application);
+}
+
+void setSettingsValues(const QString& _key, const QVariantMap& _value)
+{
+    DataStorageLayer::StorageFacade::settingsStorage()->setValues(
+        _key, _value, DataStorageLayer::SettingsStorage::SettingsPlace::Application);
+}

@@ -1,68 +1,52 @@
 #include "check_box.h"
 
 #include <ui/design_system/design_system.h>
-
+#include <ui/widgets/animations/click_animation.h>
 #include <utils/helpers/color_helper.h>
 #include <utils/helpers/text_helper.h>
 
-#include <QPainter>
 #include <QPaintEvent>
-#include <QVariantAnimation>
+#include <QPainter>
 
 
 class CheckBox::Implementation
 {
 public:
-    Implementation();
+    /**
+     * @brief Установлена ли галочка
+     */
+    bool isChecked = false;
+    bool isIndeterminate = false;
 
     /**
-     * @brief Анимировать клик
+     * @brief Текст
      */
-    void animateClick();
-
-
-    bool isChecked = false;
     QString text;
+
+    /**
+     * @brief Цвет галочки
+     */
+    QColor checkMarkColor;
 
     /**
      * @brief  Декорации переключателя при клике
      */
-    QVariantAnimation decorationRadiusAnimation;
-    QVariantAnimation decorationOpacityAnimation;
+    ClickAnimation decorationAnimation;
 };
-
-CheckBox::Implementation::Implementation()
-{
-    decorationRadiusAnimation.setEasingCurve(QEasingCurve::OutQuad);
-    decorationRadiusAnimation.setDuration(160);
-
-    decorationOpacityAnimation.setEasingCurve(QEasingCurve::InQuad);
-    decorationOpacityAnimation.setStartValue(0.5);
-    decorationOpacityAnimation.setEndValue(0.0);
-    decorationOpacityAnimation.setDuration(160);
-}
-
-void CheckBox::Implementation::animateClick()
-{
-    decorationOpacityAnimation.setCurrentTime(0);
-    decorationRadiusAnimation.start();
-    decorationOpacityAnimation.start();
-}
 
 
 // ****
 
 
 CheckBox::CheckBox(QWidget* _parent)
-    : Widget(_parent),
-      d(new Implementation)
+    : Widget(_parent)
+    , d(new Implementation)
 {
+    setAttribute(Qt::WA_Hover);
     setFocusPolicy(Qt::StrongFocus);
 
-    connect(&d->decorationRadiusAnimation, &QVariantAnimation::valueChanged, this, [this] { update(); });
-    connect(&d->decorationOpacityAnimation, &QVariantAnimation::valueChanged, this, [this] { update(); });
-
-    designSystemChangeEvent(nullptr);
+    connect(&d->decorationAnimation, &ClickAnimation::valueChanged, this,
+            qOverload<>(&CheckBox::update));
 }
 
 CheckBox::~CheckBox() = default;
@@ -74,13 +58,36 @@ bool CheckBox::isChecked() const
 
 void CheckBox::setChecked(bool _checked)
 {
-    if (d->isChecked == _checked) {
+    if ((_checked && d->isChecked) || (!_checked && !d->isChecked && !d->isIndeterminate)) {
         return;
     }
 
     d->isChecked = _checked;
-    emit checkedChanged(d->isChecked);
+    d->isIndeterminate = false;
+    emit checkedChanged(d->isChecked, d->isIndeterminate);
     update();
+}
+
+bool CheckBox::isIndeterminate() const
+{
+    return d->isIndeterminate;
+}
+
+void CheckBox::setIndeterminate()
+{
+    if (d->isIndeterminate) {
+        return;
+    }
+
+    d->isIndeterminate = true;
+    d->isChecked = false;
+    emit checkedChanged(d->isChecked, d->isIndeterminate);
+    update();
+}
+
+QString CheckBox::text() const
+{
+    return d->text;
 }
 
 void CheckBox::setText(const QString& _text)
@@ -94,14 +101,30 @@ void CheckBox::setText(const QString& _text)
     update();
 }
 
+void CheckBox::setCheckMarkColor(const QColor& _color)
+{
+    if (d->checkMarkColor == _color) {
+        return;
+    }
+
+    d->checkMarkColor = _color;
+    update();
+}
+
+QSize CheckBox::minimumSizeHint() const
+{
+    return sizeHint();
+}
+
 QSize CheckBox::sizeHint() const
 {
-    return QSize(static_cast<int>(Ui::DesignSystem::checkBox().margins().left()
-                                  + Ui::DesignSystem::checkBox().iconSize().width()
-                                  + Ui::DesignSystem::checkBox().spacing()
-                                  + TextHelper::fineTextWidthF(d->text, Ui::DesignSystem::font().subtitle1())
-                                  + Ui::DesignSystem::checkBox().margins().right()),
-                 static_cast<int>(Ui::DesignSystem::checkBox().height()));
+    return QSize(
+        static_cast<int>(Ui::DesignSystem::checkBox().margins().left()
+                         + Ui::DesignSystem::checkBox().iconSize().width()
+                         + Ui::DesignSystem::checkBox().spacing()
+                         + TextHelper::fineTextWidthF(d->text, Ui::DesignSystem::font().subtitle1())
+                         + Ui::DesignSystem::checkBox().margins().right()),
+        static_cast<int>(Ui::DesignSystem::checkBox().height()));
 }
 
 void CheckBox::paintEvent(QPaintEvent* _event)
@@ -115,10 +138,14 @@ void CheckBox::paintEvent(QPaintEvent* _event)
     painter.fillRect(_event->rect(), backgroundColor());
 
     //
+    // Позиционируем рисовальщика
+    //
+    painter.translate(contentsRect().topLeft());
+
+    //
     // Настраиваем размещение текста для разных языков
     //
     qreal textRectX = 0;
-    qreal textWidth = 0;
     QRectF iconRect;
     QRectF textRect;
 
@@ -129,19 +156,16 @@ void CheckBox::paintEvent(QPaintEvent* _event)
                          Ui::DesignSystem::checkBox().iconSize().height());
 
         textRectX = iconRect.right() + Ui::DesignSystem::checkBox().spacing();
-        textWidth = width() - textRectX;
-        textRect.setRect(textRectX, 0, textWidth, sizeHint().height());
+        textRect.setRect(textRectX, 0, width() - textRectX, sizeHint().height());
     } else {
-        textWidth = width()
-                - Ui::DesignSystem::checkBox().margins().left()
-                - Ui::DesignSystem::checkBox().spacing()
-                - Ui::DesignSystem::checkBox().iconSize().width()
-                - Ui::DesignSystem::checkBox().margins().right();
+        const auto textWidth = width() - Ui::DesignSystem::checkBox().margins().left()
+            - Ui::DesignSystem::checkBox().spacing()
+            - Ui::DesignSystem::checkBox().iconSize().width()
+            - Ui::DesignSystem::checkBox().margins().right();
 
         textRectX = Ui::DesignSystem::checkBox().margins().left();
         textRect.setRect(textRectX, 0, textWidth, sizeHint().height());
-        iconRect.setRect(textRectX + textWidth
-                         + Ui::DesignSystem::checkBox().spacing(),
+        iconRect.setRect(textRectX + textWidth + Ui::DesignSystem::checkBox().spacing(),
                          Ui::DesignSystem::checkBox().margins().top(),
                          Ui::DesignSystem::checkBox().iconSize().width(),
                          Ui::DesignSystem::checkBox().iconSize().height());
@@ -150,36 +174,38 @@ void CheckBox::paintEvent(QPaintEvent* _event)
     //
     // Рисуем декорацию переключателя
     //
-    if (hasFocus()) {
+    const auto checkMarkColor
+        = d->checkMarkColor.isValid() ? d->checkMarkColor : Ui::DesignSystem::color().accent();
+    if (underMouse() || hasFocus()) {
         painter.setPen(Qt::NoPen);
-        painter.setBrush(Ui::DesignSystem::color().secondary());
-        painter.setOpacity(Ui::DesignSystem::focusBackgroundOpacity());
-        const auto radius = d->decorationRadiusAnimation.endValue().toReal();
+        painter.setBrush(isChecked() || isIndeterminate() ? checkMarkColor : textColor());
+        painter.setOpacity(hasFocus() ? Ui::DesignSystem::focusBackgroundOpacity()
+                                      : Ui::DesignSystem::hoverBackgroundOpacity());
+        const auto radius = d->decorationAnimation.maximumRadius();
         painter.drawEllipse(iconRect.center(), radius, radius);
         painter.setOpacity(1.0);
     }
-    if (d->decorationRadiusAnimation.state() == QVariantAnimation::Running
-        || d->decorationOpacityAnimation.state() == QVariantAnimation::Running) {
+    if (d->decorationAnimation.state() == ClickAnimation::Running) {
         painter.setPen(Qt::NoPen);
-        painter.setBrush(Ui::DesignSystem::color().secondary());
-        painter.setOpacity(d->decorationOpacityAnimation.currentValue().toReal());
-        const auto radius = d->decorationRadiusAnimation.currentValue().toReal();
+        painter.setBrush(isChecked() ? checkMarkColor : textColor());
+        painter.setOpacity(d->decorationAnimation.opacity());
+        const auto radius = d->decorationAnimation.radius();
         painter.drawEllipse(iconRect.center(), radius, radius);
         painter.setOpacity(1.0);
     }
 
     const auto penColor = isEnabled()
-                          ? textColor()
-                          : ColorHelper::transparent(textColor(), Ui::DesignSystem::disabledTextOpacity());
+        ? textColor()
+        : ColorHelper::transparent(textColor(), Ui::DesignSystem::disabledTextOpacity());
 
     //
     // Рисуем сам переключатель
     //
     painter.setFont(Ui::DesignSystem::font().iconsMid());
-    painter.setPen(isEnabled() && d->isChecked
-                   ? Ui::DesignSystem::color().secondary()
-                   : penColor);
-    painter.drawText(iconRect, Qt::AlignCenter, d->isChecked ? u8"\U000f0c52" : u8"\U000f0131");
+    painter.setPen(isEnabled() && (isChecked() || isIndeterminate()) ? checkMarkColor : penColor);
+    painter.drawText(iconRect, Qt::AlignCenter,
+                     d->isChecked ? u8"\U000F0132"
+                                  : (d->isIndeterminate ? u8"\U000F0375" : u8"\U000F0131"));
 
 
     //
@@ -187,27 +213,48 @@ void CheckBox::paintEvent(QPaintEvent* _event)
     //
     painter.setFont(Ui::DesignSystem::font().subtitle1());
     painter.setPen(penColor);
-    painter.drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter, d->text);
+    painter.drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter,
+                     painter.fontMetrics().elidedText(d->text, Qt::ElideRight, textRect.width()));
+}
+
+void CheckBox::mousePressEvent(QMouseEvent* _event)
+{
+    Q_UNUSED(_event)
+    d->decorationAnimation.start();
 }
 
 void CheckBox::mouseReleaseEvent(QMouseEvent* _event)
 {
-    Q_UNUSED(_event)
-
     if (!rect().contains(_event->pos())) {
         return;
     }
 
-    setChecked(!d->isChecked);
-    d->animateClick();
+    if (d->isChecked || d->isIndeterminate) {
+        setChecked(false);
+    } else {
+        setChecked(true);
+    }
+}
+
+void CheckBox::keyPressEvent(QKeyEvent* _event)
+{
+    if (_event->key() == Qt::Key_Space) {
+        _event->accept();
+        d->decorationAnimation.start();
+        setChecked(!isChecked());
+        return;
+    }
+
+    Widget::keyPressEvent(_event);
 }
 
 void CheckBox::designSystemChangeEvent(DesignSystemChangeEvent* _event)
 {
     Q_UNUSED(_event)
 
-    d->decorationRadiusAnimation.setStartValue(Ui::DesignSystem::checkBox().iconSize().height() / 2.0);
-    d->decorationRadiusAnimation.setEndValue(Ui::DesignSystem::checkBox().height() / 2.5);
+    d->decorationAnimation.setRadiusInterval(Ui::DesignSystem::radioButton().iconSize().height()
+                                                 / 2.0,
+                                             Ui::DesignSystem::radioButton().height() / 2.5);
 
     updateGeometry();
     update();

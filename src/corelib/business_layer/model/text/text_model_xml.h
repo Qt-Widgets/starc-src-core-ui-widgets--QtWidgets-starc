@@ -2,40 +2,64 @@
 
 #include <business_layer/model/abstract_model_xml.h>
 
-namespace BusinessLayer
-{
-namespace xml
-{
+
+namespace BusinessLayer {
+namespace xml {
 
 //
-// Глава
+// Папка и сцена
 //
-const QString kChapterTag = QLatin1String("chapter");
-const QString kUuidAttribute = QLatin1String("uuid");
-const QString kNumberTag = QLatin1String("number");
-const QString kNumberValueAttribute = QLatin1String("value");
-const QString kStampTag = QLatin1String("stamp");
+const QLatin1String kUuidAttribute("uuid");
+const QLatin1String kPlotsAttribute("plots");
+const QLatin1String kOmitedAttribute("omited");
+const QLatin1String kNumberTag("number");
+const QLatin1String kNumberValueAttribute("value");
+const QLatin1String kNumberIsCustomAttribute("custom");
+const QLatin1String kNumberIsEatNumberAttribute("eat");
+const QLatin1String kNumberIsLockedAttribute("fixed");
+const QLatin1String kColorTag("color");
+const QLatin1String kTitleTag("title");
+const QLatin1String kStampTag("stamp");
+const QLatin1String kTagsTag("tags");
+const QLatin1String kTagTag("tag");
+const QLatin1String kPlannedDurationTag("planned_duration");
+
+//
+// Разделитель
+//
+const QLatin1String kSplitterTag("splitter");
+const QLatin1String kTypeAttribute("type");
 
 //
 // Текст
 //
-const QString kValueTag = QLatin1String("v");
-const QString kReviewMarksTag = QLatin1String("rms");
-const QString kReviewMarkTag = QLatin1String("rm");
-const QString kCommentTag = QLatin1String("c");
-const QString kFormatsTag = QLatin1String("fms");
-const QString kFormatTag = QLatin1String("fm");
-const QString kFromAttribute = QLatin1String("from");
-const QString kLengthAttribute = QLatin1String("length");
-const QString kColorAttribute = QLatin1String("color");
-const QString kBackgroundColorAttribute = QLatin1String("bgcolor");
-const QString kDoneAttribute = QLatin1String("done");
-const QString kAuthorAttribute = QLatin1String("author");
-const QString kDateAttribute = QLatin1String("date");
-const QString kBoldAttribute = QLatin1String("bold");
-const QString kItalicAttribute = QLatin1String("italic");
-const QString kUnderlineAttribute = QLatin1String("underline");
-const QString kAlignAttribute = QLatin1String("align");
+const QLatin1String kParametersTag("params");
+const QLatin1String kBookmarkTag("bm");
+const QLatin1String kValueTag("v");
+const QLatin1String kReviewMarksTag("rms");
+const QLatin1String kReviewMarkTag("rm");
+const QLatin1String kCommentTag("c");
+const QLatin1String kFormatsTag("fms");
+const QLatin1String kFormatTag("fm");
+const QLatin1String kRevisionsTag("revs");
+const QLatin1String kRevisionTag("rev");
+const QLatin1String kFromAttribute("from");
+const QLatin1String kLengthAttribute("length");
+const QLatin1String kColorAttribute("color");
+const QLatin1String kBackgroundColorAttribute("bgcolor");
+const QLatin1String kDoneAttribute("done");
+const QLatin1String kAuthorAttribute("author");
+const QLatin1String kEmailAttribute("email");
+const QLatin1String kDateAttribute("date");
+const QLatin1String kIsCommentEditedAttribute("e");
+const QLatin1String kBoldAttribute("bold");
+const QLatin1String kItalicAttribute("italic");
+const QLatin1String kUnderlineAttribute("underline");
+const QLatin1String kStrikethroughAttribute("strikethrough");
+const QLatin1String kFontFamilyAttribute("fontf");
+const QLatin1String kFontSizeAttribute("fonts");
+const QLatin1String kAlignAttribute("align");
+const QLatin1String kInFirstColumnAttribute("ifc");
 
 } // namespace xml
 } // namespace BusinessLayer

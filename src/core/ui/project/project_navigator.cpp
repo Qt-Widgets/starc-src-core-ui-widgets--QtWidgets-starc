@@ -4,28 +4,38 @@
 
 #include <business_layer/model/structure/structure_model.h>
 #include <business_layer/model/structure/structure_model_item.h>
-
 #include <domain/document_object.h>
-
 #include <ui/design_system/design_system.h>
 #include <ui/widgets/button/button.h>
 #include <ui/widgets/context_menu/context_menu.h>
 #include <ui/widgets/shadow/shadow.h>
 #include <ui/widgets/tree/tree.h>
+#include <utils/shugar.h>
 
 #include <QAction>
 #include <QContextMenuEvent>
+#include <QScrollBar>
+#include <QShortcut>
+#include <QToolTip>
 #include <QUuid>
 #include <QVBoxLayout>
 
-
-namespace Ui
-{
+namespace Ui {
 
 class ProjectNavigator::Implementation
 {
 public:
-    explicit Implementation(QWidget* _parent);
+    explicit Implementation(ProjectNavigator* _parent);
+
+    /**
+     * @brief Находится ли заданная позиция над иконкой отображения навигатора по документу
+     */
+    bool isOnDocumentNavigatorButton(const QPoint& _position) const;
+
+
+    ProjectNavigator* q = nullptr;
+
+    bool isReadOnly = false;
 
     Widget* navigatorPage = nullptr;
     Tree* tree = nullptr;
@@ -34,24 +44,47 @@ public:
 
     QHBoxLayout* buttonsLayout = nullptr;
     Button* addDocumentButton = nullptr;
+    QShortcut* addDocumentShortcut = nullptr;
+    Button* emptyRecycleBinButton = nullptr;
 };
 
-ProjectNavigator::Implementation::Implementation(QWidget* _parent)
-    : navigatorPage(new Widget(_parent)),
-      tree(new Tree(_parent)),
-      treeDelegate(new ProjectTreeDelegate(tree)),
-      contextMenu(new ContextMenu(tree)),
-      buttonsLayout(new QHBoxLayout),
-      addDocumentButton(new Button(_parent))
+ProjectNavigator::Implementation::Implementation(ProjectNavigator* _parent)
+    : q(_parent)
+    , navigatorPage(new Widget(_parent))
+    , tree(new Tree(_parent))
+    , treeDelegate(new ProjectTreeDelegate(tree))
+    , contextMenu(new ContextMenu(tree))
+    , buttonsLayout(new QHBoxLayout)
+    , addDocumentButton(new Button(_parent))
+    , addDocumentShortcut(new QShortcut(_parent))
+    , emptyRecycleBinButton(new Button(_parent))
 {
     tree->setDragDropEnabled(true);
     tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     tree->setContextMenuPolicy(Qt::ContextMenuPolicy::CustomContextMenu);
+    tree->setExpandsOnDoubleClick(false);
     addDocumentButton->setFocusPolicy(Qt::NoFocus);
     addDocumentButton->setIcon(u8"\U000f0415");
+    addDocumentShortcut->setKey(QKeySequence::New);
+    emptyRecycleBinButton->setFocusPolicy(Qt::NoFocus);
+    emptyRecycleBinButton->setIcon(u8"\U000F05E8");
+    emptyRecycleBinButton->hide();
 
     new Shadow(Qt::TopEdge, tree);
     new Shadow(Qt::BottomEdge, tree);
+}
+
+bool ProjectNavigator::Implementation::isOnDocumentNavigatorButton(const QPoint& _position) const
+{
+    const auto isNavigatorAvailable
+        = q->currentIndex()
+              .data(static_cast<int>(BusinessLayer::StructureModelDataRole::IsNavigatorAvailable))
+              .toBool();
+    if (!isNavigatorAvailable) {
+        return false;
+    }
+
+    return tree->isOnItemTrilingIcon(_position);
 }
 
 
@@ -59,14 +92,16 @@ ProjectNavigator::Implementation::Implementation(QWidget* _parent)
 
 
 ProjectNavigator::ProjectNavigator(QWidget* _parent)
-    : StackWidget(_parent),
-      d(new Implementation(this))
+    : StackWidget(_parent)
+    , d(new Implementation(this))
 {
     setAnimationType(AnimationType::Slide);
 
+    d->tree->installEventFilter(this);
     d->buttonsLayout->setContentsMargins({});
     d->buttonsLayout->setSpacing(0);
     d->buttonsLayout->addWidget(d->addDocumentButton);
+    d->buttonsLayout->addWidget(d->emptyRecycleBinButton);
 
     QVBoxLayout* layout = new QVBoxLayout;
     layout->setContentsMargins({});
@@ -77,8 +112,20 @@ ProjectNavigator::ProjectNavigator(QWidget* _parent)
     showProjectNavigator();
 
     connect(d->tree, &Tree::currentIndexChanged, this, &ProjectNavigator::itemSelected);
-    connect(d->tree, &Tree::doubleClicked, this, &ProjectNavigator::itemDoubleClicked);
-    connect(d->tree, &Tree::customContextMenuRequested, this, [this] (const QPoint& _pos) {
+    connect(d->tree, &Tree::clicked, this, [this](const QModelIndex& _index, bool _firstClick) {
+        const auto clickPosition = d->tree->mapFromGlobal(QCursor::pos());
+        if (!_firstClick && d->isOnDocumentNavigatorButton(clickPosition)) {
+            emit itemNavigationRequested(_index);
+        }
+    });
+    connect(d->tree, &Tree::doubleClicked, this, [this](const QModelIndex& _index) {
+        if (d->tree->model()->rowCount(_index) > 0 && !d->tree->isExpanded(_index)) {
+            d->tree->expand(_index);
+        } else {
+            emit itemDoubleClicked(_index);
+        }
+    });
+    connect(d->tree, &Tree::customContextMenuRequested, this, [this](const QPoint& _pos) {
         //
         // Уведомляем менеджер, что необходимо обновить модель контекстного меню
         //
@@ -91,6 +138,29 @@ ProjectNavigator::ProjectNavigator(QWidget* _parent)
     });
 
     connect(d->addDocumentButton, &Button::clicked, this, &ProjectNavigator::addDocumentClicked);
+    connect(d->addDocumentShortcut, &QShortcut::activated, this, [this] {
+        if (d->addDocumentButton->isVisible()) {
+            emit addDocumentClicked();
+        }
+    });
+    connect(d->emptyRecycleBinButton, &Button::clicked, this,
+            &ProjectNavigator::emptyRecycleBinClicked);
+}
+
+ProjectNavigator::~ProjectNavigator() = default;
+
+void ProjectNavigator::setReadOnly(bool _readOnly)
+{
+    if (d->isReadOnly == _readOnly) {
+        return;
+    }
+
+    d->isReadOnly = _readOnly;
+    const auto enabled = !d->isReadOnly;
+    d->tree->setDragDropEnabled(enabled);
+    d->addDocumentButton->setEnabled(enabled);
+    d->addDocumentShortcut->setEnabled(enabled);
+    d->emptyRecycleBinButton->setEnabled(enabled);
 }
 
 void ProjectNavigator::setModel(QAbstractItemModel* _model)
@@ -108,10 +178,24 @@ QVariant ProjectNavigator::saveState() const
     return d->tree->saveState();
 }
 
-void ProjectNavigator::restoreState(const QVariant& _state)
+void ProjectNavigator::restoreState(bool _isNewProject, const QVariant& _state)
 {
+    //
+    // Если проект новый, то раскрываем только последний документ
+    //
+    if (_isNewProject) {
+        auto model = d->tree->model();
+        for (int row = model->rowCount() - 1; row >= 0; --row) {
+            const auto index = model->index(row, 0);
+            if (model->rowCount(index) > 0) {
+                d->tree->expand(index);
+                break;
+            }
+        }
+    }
+
     if (!_state.isValid()) {
-        d->tree->setCurrentIndex(d->tree->model()->index(0,0));
+        d->tree->setCurrentIndex(d->tree->model()->index(0, 0));
         return;
     }
 
@@ -138,12 +222,45 @@ bool ProjectNavigator::isProjectNavigatorShown() const
     return currentWidget() == d->navigatorPage;
 }
 
+void ProjectNavigator::showButton(ActionButton _type)
+{
+    switch (_type) {
+    case ActionButton::AddDocument: {
+        d->emptyRecycleBinButton->hide();
+        d->addDocumentButton->show();
+        break;
+    }
+
+    case ActionButton::EmptyRecycleBin: {
+        d->addDocumentButton->hide();
+        d->emptyRecycleBinButton->show();
+        break;
+    }
+    }
+}
+
+void ProjectNavigator::setButtonEnabled(bool _enabled)
+{
+    d->addDocumentButton->setEnabled(!d->isReadOnly && _enabled);
+    d->emptyRecycleBinButton->setEnabled(!d->isReadOnly && _enabled);
+}
+
+bool ProjectNavigator::eventFilter(QObject* _watched, QEvent* _event)
+{
+    if (_watched == d->tree && _event->type() == QEvent::ToolTip) {
+        QHelpEvent* event = static_cast<QHelpEvent*>(_event);
+        if (d->isOnDocumentNavigatorButton(event->pos())) {
+            QToolTip::showText(event->globalPos(), tr("Show document navigator"));
+        }
+    }
+    return StackWidget::eventFilter(_watched, _event);
+}
+
 void ProjectNavigator::updateTranslations()
 {
     d->addDocumentButton->setText(tr("Add document"));
+    d->emptyRecycleBinButton->setText(tr("Empty recycle bin"));
 }
-
-ProjectNavigator::~ProjectNavigator() = default;
 
 void ProjectNavigator::designSystemChangeEvent(DesignSystemChangeEvent* _event)
 {
@@ -158,12 +275,13 @@ void ProjectNavigator::designSystemChangeEvent(DesignSystemChangeEvent* _event)
     d->contextMenu->setTextColor(DesignSystem::color().onBackground());
 
 
-    d->buttonsLayout->setContentsMargins(DesignSystem::layout().px12(),
-                                         DesignSystem::layout().px12(),
-                                         DesignSystem::layout().px12(),
-                                         DesignSystem::layout().px12());
-    d->addDocumentButton->setBackgroundColor(DesignSystem::color().secondary());
-    d->addDocumentButton->setTextColor(DesignSystem::color().secondary());
+    d->buttonsLayout->setContentsMargins(
+        DesignSystem::layout().px12(), DesignSystem::layout().px12(), DesignSystem::layout().px12(),
+        DesignSystem::layout().px12());
+    d->addDocumentButton->setBackgroundColor(DesignSystem::color().accent());
+    d->addDocumentButton->setTextColor(DesignSystem::color().accent());
+    d->emptyRecycleBinButton->setBackgroundColor(DesignSystem::color().accent());
+    d->emptyRecycleBinButton->setTextColor(DesignSystem::color().accent());
 }
 
 } // namespace Ui

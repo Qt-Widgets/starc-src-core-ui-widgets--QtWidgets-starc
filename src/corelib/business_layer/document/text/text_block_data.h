@@ -1,15 +1,17 @@
 #pragma once
 
-#include <corelib_global.h>
-
 #include <QTextBlockUserData>
 
+#include <corelib_global.h>
 
-namespace BusinessLayer
-{
+
+namespace BusinessLayer {
 
 class TextModelItem;
 
+/**
+ * @brief Данные параграфа текста содержащие указатель на соответствующий элемент модели
+ */
 class CORE_LIBRARY_EXPORT TextBlockData : public QTextBlockUserData
 {
 public:

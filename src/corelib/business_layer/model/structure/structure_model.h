@@ -7,8 +7,7 @@ namespace Domain {
 enum class DocumentObjectType;
 }
 
-namespace BusinessLayer
-{
+namespace BusinessLayer {
 
 class StructureModelItem;
 
@@ -16,9 +15,7 @@ class StructureModelItem;
 /**
  * @brief Список ролей дополнительных данных для навигатора
  */
-enum class StructureModelDataRole {
-    IsNavigatorAvailable = Qt::UserRole + 1
-};
+enum class StructureModelDataRole { IsNavigatorAvailable = Qt::UserRole + 1 };
 
 
 /**
@@ -33,6 +30,11 @@ public:
     ~StructureModel() override;
 
     /**
+     * @brief Является ли проект только что созданным
+     */
+    bool isNewProject() const;
+
+    /**
      * @brief Задать название проекта
      */
     void setProjectName(const QString& _name);
@@ -41,27 +43,35 @@ public:
      * @brief Добавить документ
      */
     QModelIndex addDocument(Domain::DocumentObjectType _type, const QString& _name = {},
-        const QModelIndex& _parent = {}, const QByteArray& _content = {});
+                            const QModelIndex& _parent = {}, const QByteArray& _content = {});
 
     /**
      * @brief Добавить элемент в начало
      */
-    void prependItem(StructureModelItem* _item, StructureModelItem* _parentItem = nullptr);
+    void prependItem(StructureModelItem* _item, StructureModelItem* _parentItem = nullptr,
+                     const QByteArray& _content = {});
 
     /**
      * @brief Добавить элемент в конец
      */
-    void appendItem(StructureModelItem* _item, StructureModelItem* _parentItem = nullptr, const QByteArray& _content = {});
+    void appendItem(StructureModelItem* _item, StructureModelItem* _parentItem = nullptr,
+                    const QByteArray& _content = {});
 
     /**
      * @brief Вставить элемент после родственика
      */
-    void insertItem(StructureModelItem* _item, StructureModelItem* _afterSiblingItem);
+    void insertItem(StructureModelItem* _item, StructureModelItem* _afterSiblingItem,
+                    const QByteArray& _content = {});
 
     /**
      * @brief Перенести элемент в заданного родителя
      */
     void moveItem(StructureModelItem* _item, StructureModelItem* _parentItem);
+
+    /**
+     * @brief Извлечь заданный элемент без удаления
+     */
+    void takeItem(StructureModelItem* _item);
 
     /**
      * @brief Удалить элемент
@@ -79,18 +89,25 @@ public:
     /** @{ */
     QModelIndex index(int _row, int _column, const QModelIndex& _parent = {}) const override;
     QModelIndex parent(const QModelIndex& _child) const override;
-    int columnCount( const QModelIndex& _parent = {}) const override;
+    int columnCount(const QModelIndex& _parent = {}) const override;
     int rowCount(const QModelIndex& _parent = {}) const override;
     Qt::ItemFlags flags(const QModelIndex& _index) const override;
     QVariant data(const QModelIndex& _index, int _role) const override;
     //! Реализация перетаскивания элементов
-    bool canDropMimeData(const QMimeData* _data, Qt::DropAction _action, int _row, int _column, const QModelIndex& _parent = {}) const override;
-    bool dropMimeData(const QMimeData* _data, Qt::DropAction _action, int _row, int _column, const QModelIndex& _parent = {}) override;
+    bool canDropMimeData(const QMimeData* _data, Qt::DropAction _action, int _row, int _column,
+                         const QModelIndex& _parent = {}) const override;
+    bool dropMimeData(const QMimeData* _data, Qt::DropAction _action, int _row, int _column,
+                      const QModelIndex& _parent = {}) override;
     QMimeData* mimeData(const QModelIndexList& _indexes) const override;
     QStringList mimeTypes() const override;
     Qt::DropActions supportedDragActions() const override;
     Qt::DropActions supportedDropActions() const override;
     /** @} */
+
+    /**
+     * @brief Получить индекс заданного элемента
+     */
+    QModelIndex indexForItem(StructureModelItem* _item) const;
 
     /**
      * @brief Получить элемент находящийся в заданном индексе
@@ -119,9 +136,23 @@ public:
     void setItemName(StructureModelItem* _item, const QString& _name);
 
     /**
+     * @brief Задать цвет элемента
+     */
+    void setItemColor(StructureModelItem* _item, const QColor& _color);
+
+    /**
      * @brief Задать видимость элемента
      */
     void setItemVisible(StructureModelItem* _item, bool _visible);
+
+    /**
+     * @brief Работа со списком версий элемента
+     */
+    void addItemVersion(StructureModelItem* _item, const QString& _name, const QColor& _color,
+                        bool _readOnly, const QByteArray& _content);
+    void updateItemVersion(StructureModelItem* _item, int _versionIndex, const QString& _name,
+                           const QColor& _color, bool _readOnly);
+    void removeItemVersion(StructureModelItem* _item, int _versionIndex);
 
     /**
      * @brief Задать возможность перехода в навигатор для заданного индекса
@@ -133,7 +164,13 @@ signals:
      * @brief Был добавлен документ с заданным идентификатором, типом и содержимым
      */
     void documentAdded(const QUuid& _uuid, const QUuid& _parentUuid,
-        Domain::DocumentObjectType _type, const QString& _name, const QByteArray& _content);
+                       Domain::DocumentObjectType _type, const QString& _name,
+                       const QByteArray& _content);
+
+    /**
+     * @brief Документ сейчас будет удалён
+     */
+    void documentAboutToBeRemoved(const QUuid& _uuid);
 
 protected:
     /**
@@ -143,13 +180,8 @@ protected:
     void initDocument() override;
     void clearDocument() override;
     QByteArray toXml() const override;
+    ChangeCursor applyPatch(const QByteArray& _patch) override;
     /** @} */
-
-private:
-    /**
-     * @brief Получить индекс заданного элемента
-     */
-    QModelIndex indexForItem(StructureModelItem* _item) const;
 
 private:
     class Implementation;

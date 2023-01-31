@@ -1,48 +1,19 @@
 #include "screenplay_text_model_scene_item.h"
 
-#include "screenplay_text_model_splitter_item.h"
+#include "screenplay_text_model.h"
+#include "screenplay_text_model_beat_item.h"
 #include "screenplay_text_model_text_item.h"
-#include "screenplay_text_model_xml.h"
-#include "screenplay_text_model_xml_writer.h"
 
+#include <business_layer/model/text/text_model_xml.h>
 #include <business_layer/templates/screenplay_template.h>
-
 #include <utils/helpers/text_helper.h>
 
-#include <QLocale>
-#include <QUuid>
-#include <QVariant>
-#include <QXmlStreamReader>
 
-#include <optional>
-
-
-namespace BusinessLayer
-{
+namespace BusinessLayer {
 
 class ScreenplayTextModelSceneItem::Implementation
 {
 public:
-    /**
-     * @brief Идентификатор сцены
-     */
-    QUuid uuid;
-
-    /**
-     * @brief Пропущена ли сцена
-     */
-    bool isOmited = false;
-
-    /**
-     * @brief Номер сцены
-     */
-    std::optional<Number> number;
-
-    /**
-     * @brief Штамп на сцене
-     */
-    QString stamp;
-
     /**
      * @brief Запланированная длительность сцены
      */
@@ -53,148 +24,43 @@ public:
     //
 
     /**
-     * @brief Заголовок сцены
+     * @brief Количество слов
      */
-    QString heading;
+    int wordsCount = 0;
 
     /**
-     * @brief Текст сцены
+     * @brief Количество символов
      */
-    QString text;
-
-    /**
-     * @brief Количество заметок по тексту
-     */
-    int inlineNotesSize = 0;
-
-    /**
-     * @brief Количество редакторских заметок
-     */
-    int reviewMarksSize = 0;
+    QPair<int, int> charactersCount;
 
     /**
      * @brief Длительность сцены
      */
-    std::chrono::milliseconds duration = std::chrono::milliseconds{0};
+    std::chrono::milliseconds duration = std::chrono::milliseconds{ 0 };
 };
 
 
 // ****
 
 
-bool ScreenplayTextModelSceneItem::Number::operator==(const ScreenplayTextModelSceneItem::Number& _other) const
+ScreenplayTextModelSceneItem::ScreenplayTextModelSceneItem(const ScreenplayTextModel* _model)
+    : TextModelGroupItem(_model)
+    , d(new Implementation)
 {
-    return value == _other.value;
-}
-
-ScreenplayTextModelSceneItem::ScreenplayTextModelSceneItem()
-    : ScreenplayTextModelItem(ScreenplayTextModelItemType::Scene),
-      d(new Implementation)
-{
-    d->uuid = QUuid::createUuid();
-}
-
-ScreenplayTextModelSceneItem::ScreenplayTextModelSceneItem(QXmlStreamReader& _contentReader)
-    : ScreenplayTextModelItem(ScreenplayTextModelItemType::Scene),
-      d(new Implementation)
-{
-    Q_ASSERT(_contentReader.name() == xml::kSceneTag);
-
-    const auto attributes = _contentReader.attributes();
-    if (attributes.hasAttribute(xml::kUuidAttribute)) {
-        d->uuid = attributes.value(xml::kUuidAttribute).toString();
-    }
-
-    //
-    // TODO: plots
-    //
-    d->isOmited = attributes.hasAttribute(xml::kOmitedAttribute);
-    xml::readNextElement(_contentReader);
-
-    auto currentTag = _contentReader.name();
-    if (currentTag == xml::kNumberTag) {
-        d->number = { _contentReader.attributes().value(xml::kNumberValueAttribute).toString() };
-        xml::readNextElement(_contentReader); // end
-        currentTag = xml::readNextElement(_contentReader); // next
-    }
-
-    if (currentTag == xml::kStampTag) {
-        d->stamp = TextHelper::fromHtmlEscaped(xml::readContent(_contentReader).toString());
-        xml::readNextElement(_contentReader); // end
-        currentTag = xml::readNextElement(_contentReader); // next
-    }
-
-    if (currentTag == xml::kPlannedDurationTag) {
-        d->plannedDuration = xml::readContent(_contentReader).toInt();
-        xml::readNextElement(_contentReader); // end
-        currentTag = xml::readNextElement(_contentReader); // next
-    }
-
-    if (currentTag == xml::kContentTag) {
-        xml::readNextElement(_contentReader); // next item
-        do {
-            currentTag = _contentReader.name();
-
-            //
-            // Проглатываем закрывающий контентный тэг
-            //
-            if (currentTag == xml::kContentTag
-                && _contentReader.isEndElement()) {
-                xml::readNextElement(_contentReader);
-                continue;
-            }
-            //
-            // Если дошли до конца сцены, выходим из обработки
-            //
-            else if (currentTag == xml::kSceneTag
-                && _contentReader.isEndElement()) {
-                xml::readNextElement(_contentReader);
-                break;
-            }
-            //
-            // Считываем вложенный контент
-            //
-            else if (currentTag == xml::kSceneTag) {
-                appendItem(new ScreenplayTextModelSceneItem(_contentReader));
-            } else if (currentTag == xml::kSplitterTag) {
-                appendItem(new ScreenplayTextModelSplitterItem(_contentReader));
-            } else {
-                appendItem(new ScreenplayTextModelTextItem(_contentReader));
-            }
-        } while (!_contentReader.atEnd());
-    }
-
-    //
-    // Соберём заголовок, текст сцены и прочие параметры
-    //
-    handleChange();
+    setGroupType(TextGroupType::Scene);
+    setLevel(0);
 }
 
 ScreenplayTextModelSceneItem::~ScreenplayTextModelSceneItem() = default;
 
-ScreenplayTextModelSceneItem::Number ScreenplayTextModelSceneItem::number() const
+int ScreenplayTextModelSceneItem::wordsCount() const
 {
-    if (!d->number.has_value()) {
-        return {};
-    }
-
-    return *d->number;
+    return d->wordsCount;
 }
 
-void ScreenplayTextModelSceneItem::setNumber(int _number, const QString& _prefix)
+QPair<int, int> ScreenplayTextModelSceneItem::charactersCount() const
 {
-    const auto newNumber = QString(QLocale().textDirection() == Qt::LeftToRight ? "%1%2." : ".%2%1")
-                           .arg(_prefix, QString::number(_number));
-    if (d->number.has_value()
-        && d->number->value == newNumber) {
-        return;
-    }
-
-    d->number = { newNumber };
-    //
-    // Т.к. пока мы не сохраняем номера, в указании, что произошли изменения нет смысла
-    //
-//    setChanged(true);
+    return d->charactersCount;
 }
 
 std::chrono::milliseconds ScreenplayTextModelSceneItem::duration() const
@@ -202,208 +68,233 @@ std::chrono::milliseconds ScreenplayTextModelSceneItem::duration() const
     return d->duration;
 }
 
-QVariant ScreenplayTextModelSceneItem::data(int _role) const
+QVector<QString> ScreenplayTextModelSceneItem::beats() const
 {
-    switch (_role) {
-        case Qt::DecorationRole: {
-            return u8"\U000f021a";
-        }
-
-        case SceneNumberRole: {
-            if (d->number.has_value()) {
-                return d->number->value;
-            }
-            return {};
-        }
-
-        case SceneHeadingRole: {
-            return d->heading;
-        }
-
-        case SceneTextRole: {
-            return d->text;
-        }
-
-        case SceneInlineNotesSizeRole: {
-            return d->inlineNotesSize;
-        }
-
-        case SceneReviewMarksSizeRole: {
-            return d->reviewMarksSize;
-        }
-
-        case SceneDurationRole: {
-            const int duration = std::chrono::duration_cast<std::chrono::seconds>(d->duration).count();
-            return duration;
-        }
-
-        default: {
-            return ScreenplayTextModelItem::data(_role);
-        }
-    }
-}
-
-QByteArray ScreenplayTextModelSceneItem::toXml() const
-{
-    return toXml(nullptr, 0, nullptr, 0, false);
-}
-
-QByteArray ScreenplayTextModelSceneItem::toXml(ScreenplayTextModelItem* _from, int _fromPosition,
-    ScreenplayTextModelItem* _to, int _toPosition, bool _clearUuid) const
-{
-    xml::ScreenplayTextModelXmlWriter xml;
-    xml += xmlHeader(_clearUuid);
+    QVector<QString> beats;
     for (int childIndex = 0; childIndex < childCount(); ++childIndex) {
         auto child = childAt(childIndex);
-
-        //
-        // Нетекстовые блоки, просто добавляем к общему xml
-        //
-        if (child->type() != ScreenplayTextModelItemType::Text) {
-            xml += child;
+        if (child->type() != TextModelItemType::Group) {
             continue;
         }
 
-        //
-        // Текстовые блоки, в зависимости от необходимости вставить блок целиком, или его часть
-        //
-        auto textItem = static_cast<ScreenplayTextModelTextItem*>(child);
-        if (textItem == _to) {
-            if (textItem == _from) {
-                xml += { textItem, _fromPosition, _toPosition - _fromPosition };
-            } else {
-                xml += { textItem, 0, _toPosition };
-            }
-            break;
+        auto group = static_cast<TextModelGroupItem*>(child);
+        if (group->groupType() != TextGroupType::Beat) {
+            continue;
         }
-        //
-        else if (textItem == _from) {
-            xml += { textItem, _fromPosition, textItem->text().length() - _fromPosition };
-        } else {
-            xml += textItem;
-        }
-    }
-    xml += QString("</%1>\n").arg(xml::kContentTag).toUtf8();
-    xml += QString("</%1>\n").arg(xml::kSceneTag).toUtf8();
 
-    return xml.data();
+        beats.append(group->heading());
+    }
+    return beats;
 }
 
-QByteArray ScreenplayTextModelSceneItem::xmlHeader(bool _clearUuid) const
+QString ScreenplayTextModelSceneItem::description() const
 {
-    QByteArray xml;
-    //
-    // TODO: plots
-    //
-    if (_clearUuid) {
-        xml += QString("<%1 %2=\"%3\" %4>\n")
-               .arg(xml::kSceneTag,
-                    xml::kPlotsAttribute, {},
-                    (d->isOmited ? QString("%1=\"true\"").arg(xml::kOmitedAttribute) : "")).toUtf8();
-    } else {
-        xml += QString("<%1 %2=\"%3\" %4=\"%5\" %6>\n")
-               .arg(xml::kSceneTag,
-                    xml::kUuidAttribute, d->uuid.toString(),
-                    xml::kPlotsAttribute, {},
-                    (d->isOmited ? QString("%1=\"true\"").arg(xml::kOmitedAttribute) : "")).toUtf8();
-    }
-    //
-    // TODO: Номера будем сохранять только когда они кастомные или фиксированные
-    //
-//    if (d->number.has_value()) {
-//        xml += QString("<%1 %2=\"%3\"/>\n")
-//               .arg(xml::kNumberTag, xml::kNumberValueAttribute, d->number->value).toUtf8();
-//    }
-    if (!d->stamp.isEmpty()) {
-        xml += QString("<%1><![CDATA[%2]]></%1>\n").arg(xml::kStampTag, TextHelper::toHtmlEscaped(d->stamp)).toUtf8();
-    }
-    if (d->plannedDuration.has_value()) {
-        xml += QString("<%1>%2</%1>\n").arg(xml::kPlannedDurationTag, QString::number(*d->plannedDuration)).toUtf8();
-    }
-    xml += QString("<%1>\n").arg(xml::kContentTag).toUtf8();
+    QString description;
+    for (int childIndex = 0; childIndex < childCount(); ++childIndex) {
+        auto child = childAt(childIndex);
+        if (child->type() != TextModelItemType::Group) {
+            continue;
+        }
 
-    return xml;
+        auto group = static_cast<TextModelGroupItem*>(child);
+        if (group->groupType() != TextGroupType::Beat || group->heading().isEmpty()) {
+            continue;
+        }
+
+        if (!description.isEmpty()) {
+            description.append(" ");
+        }
+        description.append(group->heading());
+    }
+    return description;
 }
 
-void ScreenplayTextModelSceneItem::copyFrom(ScreenplayTextModelItem* _item)
+QVariant ScreenplayTextModelSceneItem::data(int _role) const
 {
-    if (_item->type() != ScreenplayTextModelItemType::Scene) {
+    switch (_role) {
+    case SceneDurationRole: {
+        const int duration = std::chrono::duration_cast<std::chrono::seconds>(d->duration).count();
+        return duration;
+    }
+
+    case SceneDescriptionRole: {
+        return description();
+    }
+
+    default: {
+        return TextModelGroupItem::data(_role);
+    }
+    }
+}
+
+void ScreenplayTextModelSceneItem::copyFrom(TextModelItem* _item)
+{
+    if (_item == nullptr || type() != _item->type() || subtype() != _item->subtype()) {
         Q_ASSERT(false);
         return;
     }
 
     auto sceneItem = static_cast<ScreenplayTextModelSceneItem*>(_item);
-    d->uuid = sceneItem->d->uuid;
-    d->isOmited = sceneItem->d->isOmited;
-    d->number = sceneItem->d->number;
-    d->stamp = sceneItem->d->stamp;
     d->plannedDuration = sceneItem->d->plannedDuration;
+
+    TextModelGroupItem::copyFrom(_item);
 }
 
-bool ScreenplayTextModelSceneItem::isEqual(ScreenplayTextModelItem* _item) const
+bool ScreenplayTextModelSceneItem::isEqual(TextModelItem* _item) const
 {
-    if (_item == nullptr
-        || type() != _item->type()) {
+    if (_item == nullptr || type() != _item->type() || subtype() != _item->subtype()) {
         return false;
     }
 
     const auto sceneItem = static_cast<ScreenplayTextModelSceneItem*>(_item);
-    return d->uuid == sceneItem->d->uuid
-            && d->isOmited == sceneItem->d->isOmited
-            //
-            // TODO: тут нужно сравнивать, только когда номера зафиксированы
-            //
-//            && d->number == sceneItem->d->number
-            && d->stamp == sceneItem->d->stamp
-            && d->plannedDuration == sceneItem->d->plannedDuration;
+    return TextModelGroupItem::isEqual(_item)
+        && d->plannedDuration == sceneItem->d->plannedDuration;
+}
+
+bool ScreenplayTextModelSceneItem::isFilterAccepted(const QString& _text, bool _isCaseSensitive,
+                                                    int _filterType) const
+{
+    auto contains = [text = _text, cs = _isCaseSensitive ? Qt::CaseSensitive : Qt::CaseInsensitive](
+                        const QString& _text) { return _text.contains(text, cs); };
+    auto tagsString = [tags = this->tags()] {
+        return std::accumulate(tags.begin(), tags.end(), QString(),
+                               [](const QString& _lhs, const QPair<QString, QColor>& _rhs) {
+                                   return _lhs + _rhs.first + " ";
+                               });
+    };
+    switch (_filterType) {
+    default:
+    case 0: {
+        return contains(title()) || contains(heading()) || contains(text()) || contains(stamp())
+            || contains(tagsString());
+    }
+
+    case 1: {
+        return contains(title()) || contains(heading());
+    }
+
+    case 2: {
+        return contains(text());
+    }
+
+    case 3: {
+        return contains(tagsString());
+    }
+    }
+}
+
+QStringRef ScreenplayTextModelSceneItem::readCustomContent(QXmlStreamReader& _contentReader)
+{
+    auto currentTag = _contentReader.name();
+
+    if (currentTag == xml::kPlannedDurationTag) {
+        d->plannedDuration = xml::readContent(_contentReader).toInt();
+        xml::readNextElement(_contentReader); // end
+        currentTag = xml::readNextElement(_contentReader); // next
+    }
+
+    return currentTag;
+}
+
+QByteArray ScreenplayTextModelSceneItem::customContent() const
+{
+    QByteArray xml;
+
+    if (d->plannedDuration.has_value()) {
+        xml += QString("<%1>%2</%1>\n")
+                   .arg(xml::kPlannedDurationTag, QString::number(*d->plannedDuration))
+                   .toUtf8();
+    }
+
+    return xml;
 }
 
 void ScreenplayTextModelSceneItem::handleChange()
 {
-    d->heading.clear();
-    d->text.clear();
-    d->inlineNotesSize = 0;
-    d->reviewMarksSize = 0;
-    d->duration = std::chrono::seconds{0};
+    QString heading;
+    QString text;
+    int inlineNotesSize = 0;
+    int childGroupsReviewMarksSize = 0;
+    QVector<TextModelTextItem::ReviewMark> reviewMarks;
+    d->wordsCount = 0;
+    d->charactersCount = {};
+    d->duration = std::chrono::seconds{ 0 };
 
     for (int childIndex = 0; childIndex < childCount(); ++childIndex) {
-        auto child = childAt(childIndex);
-        if (child->type() != ScreenplayTextModelItemType::Text) {
-            continue;
+        const auto child = childAt(childIndex);
+        switch (child->type()) {
+        case TextModelItemType::Group: {
+            auto childGroupItem = static_cast<ScreenplayTextModelBeatItem*>(child);
+            text += childGroupItem->text() + " ";
+            inlineNotesSize += childGroupItem->inlineNotesSize();
+            childGroupsReviewMarksSize += childGroupItem->reviewMarksSize();
+            d->wordsCount += childGroupItem->wordsCount();
+            d->charactersCount.first += childGroupItem->charactersCount().first;
+            d->charactersCount.second += childGroupItem->charactersCount().second;
+            d->duration += childGroupItem->duration();
+            break;
         }
 
-        auto childTextItem = static_cast<ScreenplayTextModelTextItem*>(child);
+        case TextModelItemType::Text: {
+            auto childTextItem = static_cast<ScreenplayTextModelTextItem*>(child);
 
-        //
-        // Собираем текст
-        //
-        switch (childTextItem->paragraphType()) {
-            case ScreenplayParagraphType::SceneHeading: {
-                d->heading = TextHelper::smartToUpper(childTextItem->text());
+            //
+            // Собираем текст
+            //
+            switch (childTextItem->paragraphType()) {
+            case TextParagraphType::SceneHeading: {
+                heading = TextHelper::smartToUpper(childTextItem->text());
                 break;
             }
 
-            case ScreenplayParagraphType::InlineNote: {
-                ++d->inlineNotesSize;
+            case TextParagraphType::InlineNote: {
+                ++inlineNotesSize;
                 break;
             }
 
             default: {
-                d->text.append(childTextItem->text() + " ");
-                d->reviewMarksSize += std::count_if(childTextItem->reviewMarks().begin(),
-                                                    childTextItem->reviewMarks().end(),
-                                                    [] (const ScreenplayTextModelTextItem::ReviewMark& _reviewMark) {
-                                                        return !_reviewMark.isDone;
-                                                    });
+                if (!text.isEmpty() && !childTextItem->text().isEmpty()) {
+                    text.append(" ");
+                }
+                text.append(childTextItem->text());
                 break;
             }
+            }
+
+            //
+            // Собираем редакторские заметки
+            //
+            if (!reviewMarks.isEmpty() && !childTextItem->reviewMarks().isEmpty()
+                && reviewMarks.constLast().isPartiallyEqual(
+                    childTextItem->reviewMarks().constFirst())) {
+                reviewMarks.removeLast();
+            }
+            reviewMarks.append(childTextItem->reviewMarks());
+
+            //
+            // Собираем счётчики
+            //
+            d->wordsCount += childTextItem->wordsCount();
+            d->charactersCount.first += childTextItem->charactersCount().first;
+            d->charactersCount.second += childTextItem->charactersCount().second;
+            d->duration += childTextItem->duration();
+            break;
         }
 
-        //
-        // Собираем хронометраж
-        //
-        d->duration += childTextItem->duration();
+        default: {
+            break;
+        }
+        }
     }
+
+    setHeading(heading);
+    setText(text);
+    setInlineNotesSize(inlineNotesSize);
+    setReviewMarksSize(childGroupsReviewMarksSize
+                       + std::count_if(reviewMarks.begin(), reviewMarks.end(),
+                                       [](const TextModelTextItem::ReviewMark& _reviewMark) {
+                                           return !_reviewMark.isDone;
+                                       }));
 }
 
 } // namespace BusinessLayer

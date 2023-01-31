@@ -26,7 +26,7 @@
   BrandingText "Story Apps LLC"
 
   ;Default installation folder
-  InstallDir "$PROGRAMFILES\Starc"
+  InstallDir "$PROGRAMFILES64\Starc"
   InstallDirRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Starc" "UninstallString"
 
   ;Request application privileges for Windows Vista
@@ -35,8 +35,19 @@
 ;--------------------------------
 ;Interface Settings
 
+  Function createShortcutsFunction
+  CreateDirectory "$SMPROGRAMS\Starc"
+  CreateShortCut "$SMPROGRAMS\Starc\Story Architect.lnk" "$INSTDIR\starcapp.exe"
+  CreateShortCut "$SMPROGRAMS\Starc\Uninstall.lnk" "$INSTDIR\uninstall.exe" "" "$INSTDIR\uninstall.exe" 0
+  CreateShortcut "$DESKTOP\Story Architect.lnk" "$INSTDIR\starcapp.exe" "" "$INSTDIR\starcapp.exe" 0
+  FunctionEnd
+
   !define MUI_ABORTWARNING
   !define MUI_FINISHPAGE_RUN "$INSTDIR\starcapp.exe"
+  !define MUI_FINISHPAGE_SHOWREADME ""
+  !define MUI_FINISHPAGE_SHOWREADME_CHECKED
+  !define MUI_FINISHPAGE_SHOWREADME_TEXT "Create Desktop and Start Menu Shortcuts"
+  !define MUI_FINISHPAGE_SHOWREADME_FUNCTION createShortcutsFunction
 
 ;--------------------------------
 ;Pages
@@ -55,7 +66,6 @@
 ;Languages
 
   !insertmacro MUI_LANGUAGE "English"
-  !insertmacro MUI_LANGUAGE "Russian"
 
 ;--------------------------------
 ;Additional includes
@@ -87,21 +97,6 @@ Section "App files section" SecFiles
   ; Обновляем эксплорер
   System::Call 'Shell32::SHChangeNotify(i 0x8000000, i 0, i 0, i 0)'
 
-SectionEnd
-
-; Optional section (can be disabled by the user)
-Section "Start Menu Shortcuts"
-
-  CreateDirectory "$SMPROGRAMS\Starc"
-  CreateShortCut "$SMPROGRAMS\Starc\Story Architect.lnk" "$INSTDIR\starcapp.exe"
-  CreateShortCut "$SMPROGRAMS\Starc\Uninstall.lnk" "$INSTDIR\uninstall.exe" "" "$INSTDIR\uninstall.exe" 0
-  
-SectionEnd
-
-Section "Desctop Shortcut"
-
-  CreateShortcut "$DESKTOP\Story Architect.lnk" "$INSTDIR\starcapp.exe" "" "$INSTDIR\starcapp.exe" 0
-  
 SectionEnd
 
 ;--------------------------------
@@ -146,10 +141,14 @@ SectionEnd
 
 Function .onInit
 
-	;Language selection dialog
+  FindWindow $0 "" "Story Architect"
+    StrCmp $0 0 notRunning
+    MessageBox MB_OK|MB_ICONEXCLAMATION "Story Architect already running. Please close it and restart installation." /SD IDOK
+    Abort
+  notRunning:
 
-	InitPluginsDir
-	!insertmacro MUI_LANGDLL_DISPLAY
-	
+  InitPluginsDir
+  !insertmacro MUI_LANGDLL_DISPLAY
+
 FunctionEnd
 

@@ -1,21 +1,41 @@
 #pragma once
 
-#include <ui/widgets/drawer/drawer.h>
+#include <ui/widgets/stack_widget/stack_widget.h>
+
+namespace Domain {
+struct Notification;
+}
 
 
-namespace Ui
-{
+namespace Ui {
 
 /**
  * @brief Меню приложения
  */
-class MenuView : public Drawer
+class MenuView : public StackWidget
 {
     Q_OBJECT
 
 public:
     explicit MenuView(QWidget* _parent = nullptr);
     ~MenuView() override;
+
+    /**
+     * @brief Установить необходимость использования панели аккаунта
+     */
+    void setAccountVisible(bool _use);
+
+    /**
+     * @brief Параметры панели аккаунта
+     */
+    void setAvatar(const QPixmap& _avatar);
+    void setAccountName(const QString& _name);
+    void setAccountEmail(const QString& _email);
+
+    /**
+     * @brief Задать видимость пункта меню "Авторизоваться"
+     */
+    void setSignInVisible(bool _visible);
 
     /**
      * @brief Пометить пункт меню проектов выделенным
@@ -48,16 +68,56 @@ public:
     void markChangesSaved(bool _saved);
 
     /**
-     * @brief Установить индикацию отображения куплена ли про версия
+     * @brief Задать доступность импорта
      */
-    void setProVersion(bool _isPro);
+    void setImportAvailable(bool _available);
 
     /**
      * @brief Установить возможность экспортирования текущего документа
      */
     void setCurrentDocumentExportAvailable(bool _available);
 
+    /**
+     * @brief Показать/скрыть наличие непрочитанных комментариев
+     */
+    void setHasUnreadNotifications(bool _hasUnreadNotifications);
+
+    /**
+     * @brief Задать необходимость отображать дев-версии
+     */
+    void setShowDevVersions(bool _show);
+
+    /**
+     * @brief Задать список уведомлений
+     */
+    void setNotifications(const QVector<Domain::Notification>& _notifications);
+
+    /**
+     * @brief Открыть меню
+     */
+    void openMenu();
+
+    /**
+     * @brief Закрытие меню
+     */
+    void closeMenu();
+
+    /**
+     * @brief В качестве идеального размера используем размер самого меню
+     */
+    QSize sizeHint() const override;
+
 signals:
+    /**
+     * @brief Пользователь кликнул на аккаунте
+     */
+    void accountPressed();
+
+    /**
+     * @brief Нажат пункт меню "Авторизоваться"
+     */
+    void signInPressed();
+
     /**
      * @brief Нажат пункт меню "Проекты"
      */
@@ -81,7 +141,7 @@ signals:
     /**
      * @brief Нажат пункт меню "Сохранить изменения"
      */
-    void saveChangesPressed();
+    void saveProjectChangesPressed();
 
     /**
      * @brief Нажат пункт меню "Сохранить проект как"
@@ -100,6 +160,11 @@ signals:
     void importPressed();
 
     /**
+     * @brief Нажат пункт меню "Перейти в/выйти из полноэкранного режима"
+     */
+    void fullscreenPressed();
+
+    /**
      * @brief Нажат пункт меню "Настройки"
      */
     void settingsPressed();
@@ -109,11 +174,51 @@ signals:
      */
     void helpPressed();
 
+    /**
+     * @brief Нажата кнопка отображения статистики по сессиям работы с программой
+     */
+    void writingStatisticsPressed();
+
+    /**
+     * @brief Нажата кнопка отображения таймера писательского спринта
+     */
+    void writingSprintPressed();
+
+    /**
+     * @brief Нажата кнопка отображения списка уведомлений
+     */
+    void notificationsPressed();
+
+    /**
+     * @brief Пользователь включил/отключил отображение дев-версий
+     */
+    void showDevVersionsChanged(bool _show);
+
+    /**
+     * @brief Пользователь нажал кнопку продления PRO версии
+     */
+    void renewProPressed();
+
+    /**
+     * @brief Пользователь нажал кнопку продления TEAM версии
+     */
+    void renewTeamPressed();
+
 protected:
+    /**
+     * @brief Обработка нажатия клавиатуры (Закрытие при нажатии esc)
+     */
+    void keyPressEvent(QKeyEvent* _event) override;
+
     /**
      * @brief Обновить переводы
      */
     void updateTranslations() override;
+
+    /**
+     * @brief Настроить внешний вид
+     */
+    void designSystemChangeEvent(DesignSystemChangeEvent* _event) override;
 
 private:
     class Implementation;

@@ -1,19 +1,25 @@
 #pragma once
 
-#include <corelib_global.h>
-
 #include <QAbstractItemModel>
+
+#include <corelib_global.h>
 
 
 class DiffMatchPatchController;
 
 namespace Domain {
-    class DocumentObject;
+class DocumentObject;
 }
 
 namespace BusinessLayer {
 
 class AbstractImageWrapper;
+class AbstractModelItem;
+
+struct ChangeCursor {
+    AbstractModelItem* item = nullptr;
+    int position = -1;
+};
 
 /**
  * @brief Абстрактная модель для работы над документами
@@ -47,6 +53,16 @@ public:
     virtual void setDocumentName(const QString& _name);
 
     /**
+     * @brief Получить цвет документа
+     */
+    virtual QColor documentColor() const;
+
+    /**
+     * @brief Задать цвет документа
+     */
+    virtual void setDocumentColor(const QColor& _color);
+
+    /**
      * @brief Установить загрузчик изображений
      */
     void setImageWrapper(AbstractImageWrapper* _image);
@@ -57,6 +73,13 @@ public:
     void clear();
 
     /**
+     * @brief Пересохранить контент без вычленения изменений
+     * @note Используется при импорте, чтобы переписать импортированный контент таким же, но с
+     * правильным оформлением
+     */
+    void reassignContent();
+
+    /**
      * @brief Сохранить изменения прямо сейчас
      */
     void saveChanges();
@@ -64,7 +87,7 @@ public:
     /**
      * @brief Отменить последнее изменение текущего пользователя
      */
-    void undo();
+    ChangeCursor undo();
 
     /**
      * @brief Отменить заданное изменение
@@ -74,7 +97,22 @@ public:
     /**
      * @brief Повторить отменённое действие
      */
-    void redo();
+    ChangeCursor redo();
+
+    /**
+     * @brief Смержить документ с заданным
+     */
+    bool mergeDocumentChanges(const QByteArray _content, const QVector<QByteArray>& _patches);
+
+    /**
+     * @brief Наложить заданные изменения на документ
+     */
+    void applyDocumentChanges(const QVector<QByteArray>& _patches);
+
+    /**
+     * @brief Применяются ли в данный момент изменения
+     */
+    bool isChangesApplyingInProcess() const;
 
     /**
      * @brief Реализация базовых вещей для древовидной модели
@@ -82,9 +120,9 @@ public:
     /** @{ */
     QModelIndex index(int _row, int _column, const QModelIndex& _parent = {}) const override;
     QModelIndex parent(const QModelIndex& _child) const override;
-    int columnCount( const QModelIndex& _parent = {}) const override;
-    int rowCount(const QModelIndex &_parent = {}) const override;
-    QVariant data(const QModelIndex &_index, int _role) const override;
+    int columnCount(const QModelIndex& _parent = {}) const override;
+    int rowCount(const QModelIndex& _parent = {}) const override;
+    QVariant data(const QModelIndex& _index, int _role) const override;
     /** @} */
 
 signals:
@@ -92,6 +130,11 @@ signals:
      * @brief Изменилось название документа модели
      */
     void documentNameChanged(const QString& _name);
+
+    /**
+     * @brief Сменился цвет документа
+     */
+    void documentColorChanged(const QColor& _color);
 
     /**
      * @brief Модель хочет отменить изменение с заданным индексом изменения в истории
@@ -104,13 +147,38 @@ signals:
     void contentsChanged(const QByteArray& _undo, const QByteArray& _redo);
 
     /**
+     * @brief Сигналы для выполнения действий после изменения модели, чтобы пропустить вперёд
+     *        обработку событий модели в нативных Qt-классах, например в прокси модели
+     */
+    void afterRowsInserted(const QModelIndex& _parent, int _first, int _last);
+    void afterRowsRemoved(const QModelIndex& _parent, int _first, int _last);
+
+    /**
      * @brief Сигналы для обёртки групповых действий над элементами модели,
      *        которые не ложатся в рамки стандартных механизмов Qt
      */
     void rowsAboutToBeChanged();
     void rowsChanged();
 
+    /**
+     * @brief Запрос на удаление модели
+     * @note Используется за пределами доступности модели структуры,
+     *       чтобы удаление модели корректно проходило через корзину
+     */
+    void removeRequested();
+
 protected:
+    /**
+     * @brief Транзакция, для управления операция сброса данных модели
+     */
+    void beginResetModelTransaction();
+    void endResetModelTransaction();
+
+    /**
+     * @brief Настроить хранилище изображений
+     */
+    virtual void initImageWrapper();
+
     /**
      * @brief Настроить документ
      */
@@ -128,8 +196,9 @@ protected:
 
     /**
      * @brief Применить заданное изменение для модели
+     * @return Положение курсора внутри документа в конце изменения
      */
-    virtual void applyPatch(const QByteArray& _patch);
+    virtual ChangeCursor applyPatch(const QByteArray& _patch);
 
     /**
      * @brief Получить обёртку для работы с изображениями

@@ -3,8 +3,11 @@
 #include "../abstract_model.h"
 
 
-namespace BusinessLayer
-{
+namespace Domain {
+struct ProjectCollaboratorInfo;
+}
+
+namespace BusinessLayer {
 
 class CORE_LIBRARY_EXPORT ProjectInformationModel : public AbstractModel
 {
@@ -17,7 +20,8 @@ public:
     const QString& name() const;
     void setName(const QString& _name);
     Q_SIGNAL void nameChanged(const QString& _name);
-    void setDocumentName(const QString &_name) override;
+    QString documentName() const override;
+    void setDocumentName(const QString& _name) override;
 
     const QString& logline() const;
     void setLogline(const QString& _logline);
@@ -25,16 +29,32 @@ public:
 
     const QPixmap& cover() const;
     void setCover(const QPixmap& _cover);
+    void setCover(const QUuid& _uuid, const QPixmap& _cover);
     Q_SIGNAL void coverChanged(const QPixmap& _cover);
+
+    QVector<Domain::ProjectCollaboratorInfo> collaborators() const;
+    void setCollaborators(const QVector<Domain::ProjectCollaboratorInfo>& _collaborators);
+    Q_SIGNAL void collaboratorsChanged(
+        const QVector<Domain::ProjectCollaboratorInfo>& _collaborators);
+
+signals:
+    /**
+     * @brief Пользователь хочет добавить соавтора в проект
+     */
+    void collaboratorInviteRequested(const QString& _email, const QColor& _color, int _role);
+    void collaboratorUpdateRequested(const QString& _email, const QColor& _color, int _role);
+    void collaboratorRemoveRequested(const QString& _email);
 
 protected:
     /**
      * @brief Реализация модели для работы с документами
      */
     /** @{ */
+    void initImageWrapper() override;
     void initDocument() override;
     void clearDocument() override;
     QByteArray toXml() const override;
+    ChangeCursor applyPatch(const QByteArray& _patch) override;
     /** @} */
 
 private:

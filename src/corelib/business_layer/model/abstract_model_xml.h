@@ -5,10 +5,8 @@
 
 class QXmlStreamReader;
 
-namespace BusinessLayer
-{
-namespace xml
-{
+namespace BusinessLayer {
+namespace xml {
 
 //
 // Документ
@@ -25,13 +23,18 @@ const QString kContentTag = QLatin1String("content");
 /**
  * @brief Привести xml в читаемый парсером вид
  */
-QString prepareXml(const QString& _xml);
+QByteArray prepareXml(const QString& _xml);
 
 //
 // Вспомогательные методы для чтения контента из потока
 //
+#if (QT_VERSION > QT_VERSION_CHECK(6, 0, 0))
+QStringView readContent(QXmlStreamReader& _reader);
+QStringView readNextElement(QXmlStreamReader& _reader);
+#else
 QStringRef readContent(QXmlStreamReader& _reader);
 QStringRef readNextElement(QXmlStreamReader& _reader);
+#endif
 
 } // namespace xml
 } // namespace BusinessLayer

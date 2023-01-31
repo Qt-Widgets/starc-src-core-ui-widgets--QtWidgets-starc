@@ -7,11 +7,10 @@
 
 
 namespace BusinessLayer {
-    class ScreenplayTextModel;
+class ScreenplayTextModel;
 }
 
-namespace Ui
-{
+namespace Ui {
 
 /**
  * @brief Управляющий скролбаром сценария
@@ -38,6 +37,11 @@ public:
      * @brief Задать модель сценария
      */
     void setModel(BusinessLayer::ScreenplayTextModel* _model);
+
+    /**
+     * @brief Настроить видимость скролбара
+     */
+    void setScrollBarVisible(bool _visible);
 
     /**
      * @brief Ловим события об изменении размера родивиджета,
@@ -77,6 +81,21 @@ public:
     void setValue(std::chrono::milliseconds _value);
 
     /**
+     * @brief Задать размер отображаемой области
+     */
+    void setDisplayRange(std::chrono::milliseconds _value);
+
+    /**
+     * @brief Задать цвета слайдера
+     */
+    void setColors(const std::map<std::chrono::milliseconds, QColor>& _colors);
+
+    /**
+     * @brief Задать цвета закладок
+     */
+    void setBookmarks(const std::map<std::chrono::milliseconds, QColor>& _bookmarks);
+
+    /**
      * @brief Переопределяем для корректного подсчёта размера в компоновщиках
      */
     QSize sizeHint() const override;
@@ -114,7 +133,8 @@ protected:
     void mouseReleaseEvent(QMouseEvent* _event) override;
 
     /**
-     * @brief Прокидываем событие прокрутки в виджет, к которому привязан таймлайн, чтобы не обрабатывать вручную
+     * @brief Прокидываем событие прокрутки в виджет, к которому привязан таймлайн, чтобы не
+     * обрабатывать вручную
      */
     void wheelEvent(QWheelEvent* _event) override;
 

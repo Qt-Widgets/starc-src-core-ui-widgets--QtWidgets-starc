@@ -1,20 +1,34 @@
 #pragma once
 
-#include <corelib_global.h>
-
 #include <business_layer/model/abstract_model_item.h>
 
+class QXmlStreamReader;
 
-namespace BusinessLayer
-{
 
+namespace BusinessLayer {
+
+class TextModel;
 
 /**
  * @brief Перечисление типов элементов модели текста
  */
-enum class TextModelItemType {
-    Chapter,
-    Text
+enum class CORE_LIBRARY_EXPORT TextModelItemType {
+    //
+    // Элементы имеющие открывающий и закрывающий блоки (Акты и папки)
+    //
+    Folder,
+    //
+    // Элементы имеющие только открывающий блок (сцена, бит, страница, панель, глава)
+    //
+    Group,
+    //
+    // Текстовый элемент - параграф текста
+    //
+    Text,
+    //
+    // Разделитель страницы на таблицу
+    //
+    Splitter,
 };
 
 
@@ -24,13 +38,23 @@ enum class TextModelItemType {
 class CORE_LIBRARY_EXPORT TextModelItem : public AbstractModelItem
 {
 public:
-    TextModelItem(TextModelItemType _type);
+    TextModelItem(TextModelItemType _type, const TextModel* _model);
     ~TextModelItem() override;
 
     /**
      * @brief Получить тип элемента
      */
-    TextModelItemType type() const;
+    const TextModelItemType& type() const;
+
+    /**
+     * @brief Подтип элемента
+     */
+    virtual int subtype() const;
+
+    /**
+     * @brief Получить модель, в которой находится данный элемент
+     */
+    const TextModel* model() const;
 
     /**
      * @brief Переопределяем интерфейс для возврата элемента собственного класса
@@ -42,6 +66,11 @@ public:
      * @brief Определяем интерфейс получения данных элемента
      */
     QVariant data(int _role) const override;
+
+    /**
+     * @brief Считать контент из заданного ридера
+     */
+    virtual void readContent(QXmlStreamReader& _contentReader) = 0;
 
     /**
      * @brief Сформировать xml блока

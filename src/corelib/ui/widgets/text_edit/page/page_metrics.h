@@ -1,9 +1,9 @@
 #pragma once
 
-#include <corelib_global.h>
-
 #include <QMarginsF>
 #include <QPageSize>
+
+#include <corelib_global.h>
 
 class QPaintDevice;
 
@@ -13,40 +13,15 @@ class QPaintDevice;
 class CORE_LIBRARY_EXPORT PageMetrics
 {
 public:
-    /**
-     * @brief Перевести миллиметры в пикселы и обратно
-     * @param _x указывает направление (горизонтальное - true или вертикальное - false), в котором
-     * необходимо произвести рассчёт
-     */
-    static qreal mmToPx(qreal _mm, bool _x = true);
-    static qreal pxToMm(qreal _px, bool _x = true);
-
-    /**
-     * @brief Перевести пункты в пикселы и обратно
-     * @param _x указывает направление (горизонтальное - true или вертикальное - false), в котором
-     * необходимо произвести рассчёт
-     */
-    static qreal ptToPx(qreal _pt, bool _x = true);
-    static qreal pxToPt(qreal _px, bool _x = true);
-
-    /**
-     * @brief Получить размер страницы из строки
-     */
-    static QPageSize::PageSizeId pageSizeIdFromString(const QString& _from);
-
-    /**
-     * @brief Получить строку из размера страницы
-     */
-    static QString stringFromPageSizeId(QPageSize::PageSizeId _pageSize);
-
-public:
-    PageMetrics(QPageSize::PageSizeId _pageFormat = QPageSize::A4, const QMarginsF& _mmMargins = {});
+    PageMetrics(QPageSize::PageSizeId _pageFormat = QPageSize::A4,
+                const QMarginsF& _mmMargins = {});
     ~PageMetrics();
 
     /**
      * @brief Обновить метрики
      */
-    void update(QPageSize::PageSizeId _pageFormat, const QMarginsF& _mmPageMargins = {});
+    void update(QPageSize::PageSizeId _pageFormat, const QMarginsF& _mmPageMargins = {},
+                const QMarginsF& _pxPageMargins = {});
 
     /**
      * @brief Методы доступа к параметрам страницы

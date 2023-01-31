@@ -1,19 +1,18 @@
 #pragma once
 
-#include <corelib_global.h>
-
 #include <QScopedPointer>
+
+#include <corelib_global.h>
 
 class QDateTime;
 class QUuid;
 
 namespace Domain {
-    class DocumentChangeObject;
+class DocumentChangeObject;
 }
 
 
-namespace DataStorageLayer
-{
+namespace DataStorageLayer {
 
 /**
  * @brief Хранилище изменений документов
@@ -26,13 +25,34 @@ public:
     /**
      * @brief Сохранить документ
      */
-    Domain::DocumentChangeObject* appendDocumentChange(const QUuid& _documentUuid,
-        const QUuid& _uuid, const QByteArray& _undoPatch, const QByteArray& _redoPatch, const QString& _userEmail, const QString& _userName);
+    Domain::DocumentChangeObject* appendDocumentChange(
+        const QUuid& _documentUuid, const QUuid& _uuid, const QByteArray& _undoPatch,
+        const QByteArray& _redoPatch, const QString& _userEmail, const QString& _userName);
+
+    /**
+     * @brief Обновить параметры изменения
+     */
+    void updateDocumentChange(Domain::DocumentChangeObject* _change);
+
+    /**
+     * @brief Удалить изменение
+     */
+    void removeDocumentChange(Domain::DocumentChangeObject* _change);
 
     /**
      * @brief Получить изменение документа с заданным индексом
      */
     Domain::DocumentChangeObject* documentChangeAt(const QUuid& _documentUuid, int _changeIndex);
+
+    /**
+     * @brief Список не синхронизированных документов
+     */
+    QVector<QUuid> unsyncedDocuments();
+
+    /**
+     * @brief Изменения документа, которые ещё не были синхронизированы
+     */
+    QVector<Domain::DocumentChangeObject*> unsyncedDocumentChanges(const QUuid& _documentUuid);
 
     /**
      * @brief Сохранить несохранённые изменения сценарии

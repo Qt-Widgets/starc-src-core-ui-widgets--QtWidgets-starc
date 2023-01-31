@@ -1,14 +1,19 @@
 #pragma once
 
-#include <corelib_global.h>
-
 #include <QHash>
 #include <QScopedPointer>
+#include <QtContainerFwd>
+
+#include <corelib_global.h>
 
 class Hunspell;
-class QStringList;
 class QTextCodec;
 
+//
+// Списки орфографических словарей и тезаурусов
+// https://wiki.documentfoundation.org/Language/Support
+// https://wiki.openoffice.org/w/index.php?title=Dictionaries&oldid=229123#Tamil_.28India.29
+//
 
 /**
  * @brief Класс проверяющего орфографию
@@ -25,8 +30,14 @@ public:
     ~SpellChecker();
 
     /**
-     * @brief Установить язык для проверки орфографии
+     * @brief Доступна ли проверка орфографии
      */
+    bool isAvailable() const;
+
+    /**
+     * @brief Язык для проверки орфографии
+     */
+    QString spellingLanguage() const;
     void setSpellingLanguage(const QString& _languageCode);
 
     /**

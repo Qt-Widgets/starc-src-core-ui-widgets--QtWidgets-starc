@@ -1,50 +1,161 @@
 #pragma once
 
-#include <corelib_global.h>
-
 #include <QHash>
 #include <QPageSize>
 #include <QTextFormat>
+
+#include <corelib_global.h>
 
 class QTextBlock;
 class QXmlStreamAttributes;
 
 
-namespace BusinessLayer
-{
+namespace BusinessLayer {
 
 /**
- * @brief Типы параграфов в текстовом документ
+ * @brief Типы папок
  */
-enum class TextParagraphType {
-    Undefined,
-    Heading1,
-    Heading2,
-    Heading3,
-    Heading4,
-    Heading5,
-    Heading6,
-    Text,
-    InlineNote
+enum class TextFolderType {
+    Undefined = 0,
+    Root,
+    Act,
+    Sequence,
 };
 
 /**
- * @brief Определим метод для возможности использовать типы в виде ключей в словарях
+ * @brief Типы групп
  */
+enum class TextGroupType {
+    Undefined = 10,
+    Scene,
+    Beat,
+    Page,
+    Panel,
+    Chapter1,
+    Chapter2,
+    Chapter3,
+    Chapter4,
+    Chapter5,
+    Chapter6,
+};
+
+/**
+ * @brief Типы параграфов
+ */
+enum class TextParagraphType {
+    //
+    // Общие для всех стилей
+    //
+    Undefined = 100,
+    UnformattedText, //!< Простой текст (без особенного форматирования и отступов)
+    InlineNote, //!< Заметка по тексту
+    ActHeading, //!< Заголовок акта
+    ActFooter, //!< Окончание акта
+    SequenceHeading, //!< Заголовок папки
+    SequenceFooter, //!< Окончание папки
+    //
+    PageSplitter, //!< Разделитель страницы (для блоков внутри которых находятся таблицы)
+    //
+    // Скрипты
+    //
+    SceneHeading, //!< Заголовок сцены
+    SceneHeadingShadow, //!< Заголовок сцены, для вспомогательных разрывов в сценарии
+    SceneHeadingShadowTreatment, //!< Заголовок сцены, для вспомогательных разрывов в поэпизоднике
+    Character, //!< Имя персонажа
+    Dialogue, //!< Реплика персонажа
+    //
+    // ... киносценарий и частично пьесы
+    //
+    SceneCharacters, //!< Персонажи сцены
+    BeatHeading, //!< Бит истории
+    BeatHeadingShadow, //!< Бит истории, для вспомогательных разрывов
+    Action, //!< Описание действия
+    Parenthetical, //!< Ремарка в реплике персонажа
+    Lyrics, //!< Песнь или стихотворения произносимые персонажем
+    Transition, //!< Переход между кадрами
+    Shot, //!< Кадр
+    //
+    // ... радиопостановка
+    //
+    Sound, //!< Звуковой эффект
+    Music, //!< Музыка
+    Cue, //!< Спецсигнал для актёра
+    //
+    // Комикс
+    //
+    PageHeading, //!< Страница
+    PanelHeading, //!< Панель
+    PanelHeadingShadow, //!< Панель, для вспомогательных разрывов
+    Description, //!< Описание поисходящего на панели
+    //
+    // Простой текст
+    //
+    ChapterHeading1, //!< Заголовок 1
+    ChapterHeading2, //!< Заголовок 2
+    ChapterHeading3, //!< Заголовок 3
+    ChapterHeading4, //!< Заголовок 4
+    ChapterHeading5, //!< Заголовок 5
+    ChapterHeading6, //!< Заголовок 6
+    Text, //!< Текст главы
+};
+
+/**
+ * @brief Определим методы для возможности использовать типы в виде ключей в словарях
+ */
+CORE_LIBRARY_EXPORT inline uint qHash(TextFolderType _type)
+{
+    return ::qHash(static_cast<int>(_type));
+}
+CORE_LIBRARY_EXPORT inline uint qHash(TextGroupType _type)
+{
+    return ::qHash(static_cast<int>(_type));
+}
 CORE_LIBRARY_EXPORT inline uint qHash(TextParagraphType _type)
 {
     return ::qHash(static_cast<int>(_type));
 }
 
 /**
+ * @brief Получить текстовое представление типа папки
+ */
+CORE_LIBRARY_EXPORT QString toString(TextFolderType _type);
+
+/**
+ * @brief Получить тип папки из текстового представления
+ */
+CORE_LIBRARY_EXPORT TextFolderType textFolderTypeFromString(const QString& _text);
+
+/**
+ * @brief Получить текстовое представление типа группы
+ */
+CORE_LIBRARY_EXPORT QString toString(TextGroupType _type);
+
+/**
+ * @brief Получить тип группы из текстового представления
+ */
+CORE_LIBRARY_EXPORT TextGroupType textGroupTypeFromString(const QString& _text);
+
+/**
  * @brief Получить текстовое представление типа блока
  */
 CORE_LIBRARY_EXPORT QString toString(TextParagraphType _type);
+CORE_LIBRARY_EXPORT QString toDisplayString(TextParagraphType _type);
 
 /**
  * @brief Получить тип блока из текстового представления
  */
 CORE_LIBRARY_EXPORT TextParagraphType textParagraphTypeFromString(const QString& _text);
+CORE_LIBRARY_EXPORT TextParagraphType textParagraphTypeFromDisplayString(const QString& _text);
+
+/**
+ * @brief Тайтл элемента заданного типа
+ */
+CORE_LIBRARY_EXPORT QString textParagraphTitle(TextParagraphType _type);
+
+/**
+ * @brief Является ли блок заголовком
+ */
+CORE_LIBRARY_EXPORT bool isTextParagraphAHeading(TextParagraphType _type);
 
 
 /**
@@ -58,16 +169,32 @@ public:
      */
     enum Property {
         PropertyType = QTextFormat::UserProperty + 100, //!< Тип блока
+        PropertyHeaderType, //!< Тип блока заголовка
+        PropertyPrefix, //!< Префикс блока
+        PropertyPostfix, //!< Постфикс блока
         PropertyIsFirstUppercase, //!< Необходимо ли первый символ поднимать в верхний регистр
+        PropertyIsCanModify, //!< Редактируемый ли блок
         //
         // Свойства редакторских заметок
         //
-        PropertyIsReviewMark,    //!< Формат является редакторской правкой
-        PropertyIsHighlight,     //!< Является ли правка аналогом выделения цветом из ворда
-        PropertyIsDone,          //!< Правка помечена как выполненная
-        PropertyComments,        //!< Список комментариев к правке
+        PropertyIsReviewMark, //!< Формат является редакторской правкой
+        PropertyIsDone, //!< Правка помечена как выполненная
+        PropertyComments, //!< Список комментариев к правке
         PropertyCommentsAuthors, //!< Список авторов комментариев
-        PropertyCommentsDates,   //!< Список дат комментариев
+        PropertyCommentsAuthorsEmails, //!< Список email'ов авторов комментариев
+        PropertyCommentsDates, //!< Список дат комментариев
+        PropertyCommentsIsEdited, //!< Список признаков изменений комментариев
+        //
+        // Свойства корректирующих текст блоков
+        //
+        PropertyIsCorrection, //!< Не разрывающий текст блок (пустые блоки в конце страницы, блоки с
+                              //!< текстом ПРОД, или именем персонажа)
+        PropertyIsCorrectionContinued, //!< Блок с текстом ПРОД., вставляемый на обрыве реплики
+        PropertyIsCorrectionCharacter, //!< Блок с именем персонажа, вставляемый на новой странице
+        PropertyIsBreakCorrectionStart, //!< Разрывающий текст блок в начале разрыва
+        PropertyIsBreakCorrectionEnd, //!< Разрывающий текст блок в конце разрыва
+        PropertyIsCharacterContinued, //!< Имя персонажа для которого необходимо отображать
+                                      //!< допольнительный текст ПРОД., не пишем в xml
     };
 
     /**
@@ -77,19 +204,21 @@ public:
         SingleLineSpacing,
         OneAndHalfLineSpacing,
         DoubleLineSpacing,
-        FixedLineSpacing
+        FixedLineSpacing,
     };
 
     /**
-     * @brief Получить тип блока
+     * @brief Получить тип параграфа для заданного блока
+     * TODO: Для курсора стоит переименовать метод
      */
+    static TextParagraphType forBlock(const QTextCursor& _cursor);
     static TextParagraphType forBlock(const QTextBlock& _block);
 
 public:
     TextBlockStyle() = default;
 
     /**
-     * @brief Тип блока
+     * @brief Тип параграфа
      */
     TextParagraphType type() const;
     void setType(TextParagraphType _type);
@@ -143,16 +272,39 @@ public:
     void setMargins(const QMarginsF& _margins);
 
     /**
+     * @brief Отступы вокруг блока в режиме разделения на колонки, мм
+     */
+    QMarginsF marginsOnHalfPage() const;
+    void setMarginsOnHalfPage(const QMarginsF& _margins);
+
+    /**
+     * @brief Настроить стиль в соответствии с шириной разделителя страницы
+     */
+    void setPageSplitterWidth(qreal _width);
+
+    /**
      * @brief Отступ снизу, линий
      */
     int linesAfter() const;
     void setLinesAfter(int _linesAfter);
 
+    /**
+     * @brief Отображать ли загаловок блока
+     */
+    bool isTitleVisible() const;
+    void setTitleVisible(bool _visible);
+
+    /**
+     * @brief Кастомный заголовок блока
+     */
+    QString title() const;
+    void setTitle(const QString& _title);
+
 
     /**
      * @brief Настройки стиля отображения блока
      */
-    QTextBlockFormat blockFormat() const;
+    QTextBlockFormat blockFormat(bool _onHalfPage = false) const;
     void setBackgroundColor(const QColor& _color);
 
     /**
@@ -161,9 +313,25 @@ public:
     QTextCharFormat charFormat() const;
     void setTextColor(const QColor& _color);
 
+
+    /**
+     * @brief Разрешено изменять текст блока
+     */
+    bool isCanModify() const;
+
+    /**
+     * @brief Префикс стиля
+     */
+    QString prefix() const;
+
+    /**
+     * @brief Постфикс стиля
+     */
+    QString postfix() const;
+
 private:
     /**
-     * @brief Инициилизация возможна только в классе стиля сценария
+     * @brief Инициилизация возможна только в классе шаблона
      */
     explicit TextBlockStyle(const QXmlStreamAttributes& _blockAttributes);
     friend class TextTemplate;
@@ -228,14 +396,30 @@ private:
     QMarginsF m_margins;
 
     /**
+     * @brief Отступы вокруг блока в режиме разделения на колонки, мм
+     */
+    QMarginsF m_marginsOnHalfPage;
+
+    /**
      * @brief Отступ снизу, линий
      */
     int m_linesAfter = 0;
 
     /**
+     * @brief Отображать ли заголовок блока
+     */
+    bool m_isTitleVisible = false;
+
+    /**
+     * @brief Кастомный заголовок блока. Если не задан, то используется дефолтный
+     */
+    QString m_title;
+
+    /**
      * @brief Формат блока
      */
     QTextBlockFormat m_blockFormat;
+    QTextBlockFormat m_blockFormatOnHalfPage;
 
     /**
      * @brief Формат текста
@@ -245,12 +429,21 @@ private:
 
 
 /**
- * @brief Класс шаблона сценария
+ * @brief Класс шаблона оформления текста
  */
 class CORE_LIBRARY_EXPORT TextTemplate
 {
 public:
-    TextTemplate() = default;
+    TextTemplate();
+    explicit TextTemplate(const QString& _fromFile);
+    TextTemplate(const TextTemplate& _other);
+    TextTemplate& operator=(const TextTemplate& _other);
+    virtual ~TextTemplate();
+
+    /**
+     * @brief Загрузить шаблон из файла
+     */
+    void load(const QString& _fromFile);
 
     /**
      * @brief Назначить шаблон новым
@@ -268,6 +461,11 @@ public:
     QString id() const;
 
     /**
+     * @brief Валиден ли шаблон
+     */
+    bool isValid() const;
+
+    /**
      * @brief Является ли шаблон умолчальным
      */
     bool isDefault() const;
@@ -275,7 +473,7 @@ public:
     /**
      * @brief Название
      */
-    QString name() const;
+    virtual QString name() const;
     void setName(const QString& _name);
 
     /**
@@ -303,61 +501,63 @@ public:
     void setPageNumbersAlignment(Qt::Alignment _alignment);
 
     /**
+     * @brief Процент ширины страницы для левой части разделителя
+     */
+    int leftHalfOfPageWidthPercents() const;
+    void setLeftHalfOfPageWidthPercents(int _width);
+
+    /**
+     * @brief Помещать диалоги в таблицу
+     */
+    bool placeDialoguesInTable() const;
+    void setPlaceDdialoguesInTable(bool _place);
+
+    /**
+     * @brief Ширина разделителя колонок
+     */
+    qreal pageSplitterWidth() const;
+
+    /**
+     * @brief Можно ли объединять таблицы в данном шаблоне
+     */
+    virtual bool canMergeParagraph() const;
+
+    /**
+     * @brief Дефолтный стиль блока для шаблона
+     */
+    TextParagraphType defaultParagraphType() const;
+
+    /**
+     * @brief Дефолтный шрифт шаблона
+     */
+    QFont defaultFont() const;
+
+    /**
+     * @brief Шаблон оформления титульной страницы
+     */
+    const TextTemplate& titlePageTemplate() const;
+
+    /**
+     * @brief Стандартный текст титульной страницы
+     */
+    const QString& titlePage() const;
+    void setTitlePage(const QString& _titlePage);
+
+    /**
+     * @brief Шаблон оформления синопсиса
+     */
+    const TextTemplate& synopsisTemplate() const;
+
+    /**
      * @brief Получить стиль блока
      */
-    TextBlockStyle blockStyle(TextParagraphType _forType) const;
-    TextBlockStyle blockStyle(const QTextBlock& _forBlock) const;
-    void setBlockStyle(const TextBlockStyle& _blockStyle);
+    TextBlockStyle paragraphStyle(TextParagraphType _forType) const;
+    TextBlockStyle paragraphStyle(const QTextBlock& _forBlock) const;
+    void setParagraphStyle(const TextBlockStyle& _style);
 
 private:
-    explicit TextTemplate(const QString& _fromFile);
-    friend class TemplatesFacade;
-
-    /**
-     * @brief Загрузить шаблон из файла
-     */
-    void load(const QString& _fromFile);
-
-private:
-    /**
-     * @brief Идентификатор
-     */
-    QString m_id;
-
-    /**
-     * @brief Является ли шаблон умолчальным
-     */
-    bool m_isDefault = false;
-
-    /**
-     * @brief Название
-     */
-    QString m_name;
-
-    /**
-     * @brief Описание
-     */
-    QString m_description;
-
-    /**
-     * @brief Формат страницы
-     */
-    QPageSize::PageSizeId m_pageSizeId;
-
-    /**
-     * @brief Поля страницы в миллиметрах
-     */
-    QMarginsF m_pageMargins;
-
-    /**
-     * @brief Расположение нумерации
-     */
-    Qt::Alignment m_pageNumbersAlignment;
-
-    /**
-     * @brief Стили блоков текста
-     */
-    QHash<TextParagraphType, TextBlockStyle> m_blockStyles;
+    class Implementation;
+    QScopedPointer<Implementation> d;
 };
 
 /**

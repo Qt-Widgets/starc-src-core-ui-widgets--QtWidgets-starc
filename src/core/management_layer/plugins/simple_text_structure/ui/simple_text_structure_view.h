@@ -1,23 +1,33 @@
 #pragma once
 
+#include <interfaces/ui/i_document_view.h>
 #include <ui/abstract_navigator.h>
 
 class QAbstractItemModel;
+typedef QList<QModelIndex> QModelIndexList;
 
 
-namespace Ui
-{
+namespace Ui {
 
 /**
  * @brief Представление навигатора по модели текстового документа
  */
-class SimpleTextStructureView : public AbstractNavigator
+class SimpleTextStructureView : public AbstractNavigator, public IDocumentView
 {
     Q_OBJECT
 
 public:
     explicit SimpleTextStructureView(QWidget* _parent = nullptr);
     ~SimpleTextStructureView() override;
+
+    /**
+     * @brief Реализация интерфейса IDocumentView
+     */
+    /** @{ */
+    QWidget* asQWidget() override;
+    void setEditingMode(ManagementLayer::DocumentEditingMode _mode) override;
+    void setCurrentModelIndex(const QModelIndex& _index) override;
+    /** @} */
 
     /**
      * @brief Настроить навигатор в соответствии с параметрами заданными в настройках
@@ -35,9 +45,9 @@ public:
     void setModel(QAbstractItemModel* _model);
 
     /**
-     * @brief Установить текущий выделенный элемент в модели
+     * @brief Список выделенных элементов
      */
-    void setCurrentModelIndex(const QModelIndex& _index);
+    QModelIndexList selectedIndexes() const;
 
 signals:
     /**

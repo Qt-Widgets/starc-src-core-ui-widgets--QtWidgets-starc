@@ -1,42 +1,42 @@
 #include "settings_storage.h"
 
-#include <business_layer/templates/text_template.h>
+#include <business_layer/templates/comic_book_template.h>
 #include <business_layer/templates/screenplay_template.h>
-
+#include <business_layer/templates/simple_text_template.h>
 #include <data_layer/mapper/mapper_facade.h>
 #include <data_layer/mapper/settings_mapper.h>
-
 #include <ui/design_system/design_system.h>
 
 #include <QDir>
 #include <QKeySequence>
 #include <QLocale>
+#include <QSettings>
 #include <QStandardPaths>
 
 using DataMappingLayer::MapperFacade;
 
 
-namespace DataStorageLayer
-{
+namespace DataStorageLayer {
 
 namespace {
-    /**
-     * @brief Имя пользователя из системы
-     */
-    static QString systemUserName() {
-        QString name = qgetenv("USER");
+/**
+ * @brief Имя пользователя из системы
+ */
+static QString systemUserName()
+{
+    QString name = qgetenv("USER");
+    if (name.isEmpty()) {
+        //
+        // Windows
+        //
+        name = QString::fromLocal8Bit(qgetenv("USERNAME"));
         if (name.isEmpty()) {
-            //
-            // Windows
-            //
-            name = QString::fromLocal8Bit(qgetenv("USERNAME"));
-            if (name.isEmpty()) {
-                name = "user";
-            }
+            name = "user";
         }
-        return name;
     }
+    return name;
 }
+} // namespace
 
 class SettingsStorage::Implementation
 {
@@ -53,6 +53,11 @@ public:
      */
     void cacheValue(const QString& _key, const QVariant& _value, SettingsPlace _settingsPlace);
 
+
+    /**
+     * @brief Возможно ли сохранять параметры
+     */
+    bool isReadOnly = false;
 
     /**
      * @brief Настройки приложения
@@ -87,308 +92,434 @@ SettingsStorage::Implementation::Implementation()
     defaultValues.insert(kApplicationConfiguredKey, false);
     defaultValues.insert(kApplicationLanguagedKey, QLocale::AnyLanguage);
     defaultValues.insert(kApplicationThemeKey, static_cast<int>(Ui::ApplicationTheme::Light));
-    defaultValues.insert(kApplicationCustomThemeColorsKey,
-                         "323740ffffff2ab177f8f8f2272b34f8f8f222262ef8f8f2ec3740f8f8f2000000f8f8f2");
+    defaultValues.insert(
+        kApplicationCustomThemeColorsKey,
+        "323740ffffff2ab177f8f8f2272b34f8f8f222262ef8f8f2ec3740f8f8f2000000f8f8f2272b34f8f8f2");
     defaultValues.insert(kApplicationScaleFactorKey, 1.0);
-    defaultValues.insert(kApplicationUseTypewriterSoundKey, false);
     defaultValues.insert(kApplicationUseAutoSaveKey, true);
     defaultValues.insert(kApplicationSaveBackupsKey, true);
     defaultValues.insert(kApplicationBackupsFolderKey,
-        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/starc/backups");
+                         QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+                             + "/starc/backups");
+    defaultValues.insert(kApplicationShowDocumentsPagesKey, true);
+    defaultValues.insert(kApplicationUseTypewriterSoundKey, false);
+    defaultValues.insert(kApplicationUseSpellCheckerKey, false);
+    defaultValues.insert(kApplicationHighlightCurrentLineKey, false);
+    defaultValues.insert(kApplicationFocusCurrentParagraphKey, false);
+    defaultValues.insert(kApplicationUseTypewriterScrollingKey, false);
+    defaultValues.insert(kApplicationReplaceThreeDotsWithEllipsisKey, true);
+    defaultValues.insert(kApplicationSmartQuotesKey, false);
+    defaultValues.insert(kProjectTypeKey, 0);
     defaultValues.insert(kProjectSaveFolderKey,
-        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/starc/projects");
+                         QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+                             + "/starc/projects");
     defaultValues.insert(kProjectImportFolderKey,
-        QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
+                         QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
     defaultValues.insert(kProjectExportFolderKey,
-        QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
+                         QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
     //
     // Параметры редактора текста
     //
     {
-        const QString kSimpletextEditorKey = "simpletext-editor";
-        auto addSimpletextEditorStylesAction
-                = [this, kSimpletextEditorKey] (const QString& _actionType, const QString& _actionKey,
-                  TextParagraphType _from, TextParagraphType _to) {
-            defaultValues.insert(
-                        QString("%1/styles-%2/from-%3-by-%4").arg(kSimpletextEditorKey, _actionType, toString(_from), _actionKey),
-                        toString(_to));
-        };
-        auto addSimpletextEditorStylesActionByTab
-                = [addSimpletextEditorStylesAction] (const QString& _actionType,
-                  TextParagraphType _from, TextParagraphType _to) {
-            addSimpletextEditorStylesAction(_actionType, "tab", _from, _to);
-        };
-        auto addSimpletextEditorStylesActionByEnter
-                = [addSimpletextEditorStylesAction] (const QString& _actionType,
-                  TextParagraphType _from, TextParagraphType _to) {
-            addSimpletextEditorStylesAction(_actionType, "enter", _from, _to);
-        };
+        const QString kSimpleTextEditorKey = "simple-text/editor";
+        auto addSimpleTextEditorStylesAction
+            = [this, kSimpleTextEditorKey](const QString& _actionType, const QString& _actionKey,
+                                           TextParagraphType _from, TextParagraphType _to) {
+                  defaultValues.insert(
+                      QString("%1/styles-%2/from-%3-by-%4")
+                          .arg(kSimpleTextEditorKey, _actionType, toString(_from), _actionKey),
+                      toString(_to));
+              };
+        auto addSimpleTextEditorStylesActionByTab
+            = [addSimpleTextEditorStylesAction](const QString& _actionType, TextParagraphType _from,
+                                                TextParagraphType _to) {
+                  addSimpleTextEditorStylesAction(_actionType, "tab", _from, _to);
+              };
+        auto addSimpleTextEditorStylesActionByEnter
+            = [addSimpleTextEditorStylesAction](const QString& _actionType, TextParagraphType _from,
+                                                TextParagraphType _to) {
+                  addSimpleTextEditorStylesAction(_actionType, "enter", _from, _to);
+              };
         //
-        auto addSimpletextEditorStylesJumpByTab
-                = [addSimpletextEditorStylesActionByTab] (TextParagraphType _from, TextParagraphType _to) {
-            addSimpletextEditorStylesActionByTab("jumping", _from, _to);
-        };
-        auto addSimpletextEditorStylesJumpByEnter
-                = [addSimpletextEditorStylesActionByEnter] (TextParagraphType _from, TextParagraphType _to) {
-            addSimpletextEditorStylesActionByEnter("jumping", _from, _to);
-        };
-        addSimpletextEditorStylesJumpByTab(TextParagraphType::Heading1,
-                                           TextParagraphType::Heading2);
-        addSimpletextEditorStylesJumpByEnter(TextParagraphType::Heading1,
+        auto addSimpleTextEditorStylesJumpByTab =
+            [addSimpleTextEditorStylesActionByTab](TextParagraphType _from, TextParagraphType _to) {
+                addSimpleTextEditorStylesActionByTab("jumping", _from, _to);
+            };
+        auto addSimpleTextEditorStylesJumpByEnter
+            = [addSimpleTextEditorStylesActionByEnter](TextParagraphType _from,
+                                                       TextParagraphType _to) {
+                  addSimpleTextEditorStylesActionByEnter("jumping", _from, _to);
+              };
+        addSimpleTextEditorStylesJumpByTab(TextParagraphType::ChapterHeading1,
+                                           TextParagraphType::ChapterHeading2);
+        addSimpleTextEditorStylesJumpByEnter(TextParagraphType::ChapterHeading1,
                                              TextParagraphType::Text);
-        addSimpletextEditorStylesJumpByTab(TextParagraphType::Heading2,
-                                           TextParagraphType::Heading3);
-        addSimpletextEditorStylesJumpByEnter(TextParagraphType::Heading2,
+        addSimpleTextEditorStylesJumpByTab(TextParagraphType::ChapterHeading2,
+                                           TextParagraphType::ChapterHeading3);
+        addSimpleTextEditorStylesJumpByEnter(TextParagraphType::ChapterHeading2,
                                              TextParagraphType::Text);
-        addSimpletextEditorStylesJumpByTab(TextParagraphType::Heading3,
-                                           TextParagraphType::Heading4);
-        addSimpletextEditorStylesJumpByEnter(TextParagraphType::Heading3,
+        addSimpleTextEditorStylesJumpByTab(TextParagraphType::ChapterHeading3,
+                                           TextParagraphType::ChapterHeading4);
+        addSimpleTextEditorStylesJumpByEnter(TextParagraphType::ChapterHeading3,
                                              TextParagraphType::Text);
-        addSimpletextEditorStylesJumpByTab(TextParagraphType::Heading4,
-                                           TextParagraphType::Heading5);
-        addSimpletextEditorStylesJumpByEnter(TextParagraphType::Heading4,
+        addSimpleTextEditorStylesJumpByTab(TextParagraphType::ChapterHeading4,
+                                           TextParagraphType::ChapterHeading5);
+        addSimpleTextEditorStylesJumpByEnter(TextParagraphType::ChapterHeading4,
                                              TextParagraphType::Text);
-        addSimpletextEditorStylesJumpByTab(TextParagraphType::Heading5,
-                                           TextParagraphType::Heading6);
-        addSimpletextEditorStylesJumpByEnter(TextParagraphType::Heading5,
+        addSimpleTextEditorStylesJumpByTab(TextParagraphType::ChapterHeading5,
+                                           TextParagraphType::ChapterHeading6);
+        addSimpleTextEditorStylesJumpByEnter(TextParagraphType::ChapterHeading5,
                                              TextParagraphType::Text);
-        addSimpletextEditorStylesJumpByTab(TextParagraphType::Heading6,
+        addSimpleTextEditorStylesJumpByTab(TextParagraphType::ChapterHeading6,
                                            TextParagraphType::Text);
-        addSimpletextEditorStylesJumpByEnter(TextParagraphType::Heading6,
+        addSimpleTextEditorStylesJumpByEnter(TextParagraphType::ChapterHeading6,
                                              TextParagraphType::Text);
-        addSimpletextEditorStylesJumpByTab(TextParagraphType::Text,
-                                           TextParagraphType::Text);
-        addSimpletextEditorStylesJumpByEnter(TextParagraphType::Text,
-                                             TextParagraphType::Text);
-        addSimpletextEditorStylesJumpByTab(TextParagraphType::InlineNote,
-                                           TextParagraphType::Text);
-        addSimpletextEditorStylesJumpByEnter(TextParagraphType::InlineNote,
+        addSimpleTextEditorStylesJumpByTab(TextParagraphType::Text, TextParagraphType::Text);
+        addSimpleTextEditorStylesJumpByEnter(TextParagraphType::Text, TextParagraphType::Text);
+        addSimpleTextEditorStylesJumpByTab(TextParagraphType::InlineNote, TextParagraphType::Text);
+        addSimpleTextEditorStylesJumpByEnter(TextParagraphType::InlineNote,
                                              TextParagraphType::Text);
         //
-        auto addSimpletextEditorStylesChangeByTab
-                = [addSimpletextEditorStylesActionByTab] (TextParagraphType _from, TextParagraphType _to) {
-            addSimpletextEditorStylesActionByTab("changing", _from, _to);
-        };
-        auto addSimpletextEditorStylesChangeByEnter
-                = [addSimpletextEditorStylesActionByEnter] (TextParagraphType _from, TextParagraphType _to) {
-            addSimpletextEditorStylesActionByEnter("changing", _from, _to);
-        };
-        addSimpletextEditorStylesChangeByTab(TextParagraphType::Heading1,
-                                             TextParagraphType::Heading2);
-        addSimpletextEditorStylesChangeByEnter(TextParagraphType::Heading1,
-                                               TextParagraphType::Heading1);
-        addSimpletextEditorStylesChangeByTab(TextParagraphType::Heading2,
-                                             TextParagraphType::Heading3);
-        addSimpletextEditorStylesChangeByEnter(TextParagraphType::Heading2,
-                                               TextParagraphType::Heading1);
-        addSimpletextEditorStylesChangeByTab(TextParagraphType::Heading3,
-                                             TextParagraphType::Heading4);
-        addSimpletextEditorStylesChangeByEnter(TextParagraphType::Heading3,
-                                               TextParagraphType::Heading2);
-        addSimpletextEditorStylesChangeByTab(TextParagraphType::Heading4,
-                                             TextParagraphType::Heading5);
-        addSimpletextEditorStylesChangeByEnter(TextParagraphType::Heading4,
-                                               TextParagraphType::Heading3);
-        addSimpletextEditorStylesChangeByTab(TextParagraphType::Heading5,
-                                             TextParagraphType::Heading6);
-        addSimpletextEditorStylesChangeByEnter(TextParagraphType::Heading5,
-                                               TextParagraphType::Heading4);
-        addSimpletextEditorStylesChangeByTab(TextParagraphType::Heading6,
+        auto addSimpleTextEditorStylesChangeByTab =
+            [addSimpleTextEditorStylesActionByTab](TextParagraphType _from, TextParagraphType _to) {
+                addSimpleTextEditorStylesActionByTab("changing", _from, _to);
+            };
+        auto addSimpleTextEditorStylesChangeByEnter
+            = [addSimpleTextEditorStylesActionByEnter](TextParagraphType _from,
+                                                       TextParagraphType _to) {
+                  addSimpleTextEditorStylesActionByEnter("changing", _from, _to);
+              };
+        addSimpleTextEditorStylesChangeByTab(TextParagraphType::ChapterHeading1,
+                                             TextParagraphType::ChapterHeading2);
+        addSimpleTextEditorStylesChangeByEnter(TextParagraphType::ChapterHeading1,
+                                               TextParagraphType::ChapterHeading1);
+        addSimpleTextEditorStylesChangeByTab(TextParagraphType::ChapterHeading2,
+                                             TextParagraphType::ChapterHeading3);
+        addSimpleTextEditorStylesChangeByEnter(TextParagraphType::ChapterHeading2,
+                                               TextParagraphType::ChapterHeading1);
+        addSimpleTextEditorStylesChangeByTab(TextParagraphType::ChapterHeading3,
+                                             TextParagraphType::ChapterHeading4);
+        addSimpleTextEditorStylesChangeByEnter(TextParagraphType::ChapterHeading3,
+                                               TextParagraphType::ChapterHeading2);
+        addSimpleTextEditorStylesChangeByTab(TextParagraphType::ChapterHeading4,
+                                             TextParagraphType::ChapterHeading5);
+        addSimpleTextEditorStylesChangeByEnter(TextParagraphType::ChapterHeading4,
+                                               TextParagraphType::ChapterHeading3);
+        addSimpleTextEditorStylesChangeByTab(TextParagraphType::ChapterHeading5,
+                                             TextParagraphType::ChapterHeading6);
+        addSimpleTextEditorStylesChangeByEnter(TextParagraphType::ChapterHeading5,
+                                               TextParagraphType::ChapterHeading4);
+        addSimpleTextEditorStylesChangeByTab(TextParagraphType::ChapterHeading6,
                                              TextParagraphType::Text);
-        addSimpletextEditorStylesChangeByEnter(TextParagraphType::Heading6,
-                                               TextParagraphType::Heading5);
-        addSimpletextEditorStylesChangeByTab(TextParagraphType::Text,
+        addSimpleTextEditorStylesChangeByEnter(TextParagraphType::ChapterHeading6,
+                                               TextParagraphType::ChapterHeading5);
+        addSimpleTextEditorStylesChangeByTab(TextParagraphType::Text,
                                              TextParagraphType::InlineNote);
-        addSimpletextEditorStylesChangeByEnter(TextParagraphType::Text,
-                                               TextParagraphType::Heading6);
-        addSimpletextEditorStylesChangeByTab(TextParagraphType::InlineNote,
+        addSimpleTextEditorStylesChangeByEnter(TextParagraphType::Text,
+                                               TextParagraphType::ChapterHeading6);
+        addSimpleTextEditorStylesChangeByTab(TextParagraphType::InlineNote,
                                              TextParagraphType::Text);
-        addSimpletextEditorStylesChangeByEnter(TextParagraphType::InlineNote,
+        addSimpleTextEditorStylesChangeByEnter(TextParagraphType::InlineNote,
                                                TextParagraphType::InlineNote);
         //
-        auto addShortcut = [this, kSimpletextEditorKey] (BusinessLayer::TextParagraphType _type,
-                           const QString& _shortcut) {
-            defaultValues.insert(
-                        QString("%1/shortcuts/%2").arg(kSimpletextEditorKey, BusinessLayer::toString(_type)),
-                        QKeySequence(_shortcut).toString(QKeySequence::NativeText));
+        auto addShortcut = [this, kSimpleTextEditorKey](BusinessLayer::TextParagraphType _type,
+                                                        const QString& _shortcut) {
+            defaultValues.insert(QString("%1/shortcuts/%2")
+                                     .arg(kSimpleTextEditorKey, BusinessLayer::toString(_type)),
+                                 QKeySequence(_shortcut).toString(QKeySequence::NativeText));
         };
-        addShortcut(BusinessLayer::TextParagraphType::Heading1, "Ctrl+1");
-        addShortcut(BusinessLayer::TextParagraphType::Heading2, "Ctrl+2");
-        addShortcut(BusinessLayer::TextParagraphType::Heading3, "Ctrl+3");
-        addShortcut(BusinessLayer::TextParagraphType::Heading4, "Ctrl+4");
-        addShortcut(BusinessLayer::TextParagraphType::Heading5, "Ctrl+5");
-        addShortcut(BusinessLayer::TextParagraphType::Heading6, "Ctrl+6");
+        addShortcut(BusinessLayer::TextParagraphType::ChapterHeading1, "Ctrl+1");
+        addShortcut(BusinessLayer::TextParagraphType::ChapterHeading2, "Ctrl+2");
+        addShortcut(BusinessLayer::TextParagraphType::ChapterHeading3, "Ctrl+3");
+        addShortcut(BusinessLayer::TextParagraphType::ChapterHeading4, "Ctrl+4");
+        addShortcut(BusinessLayer::TextParagraphType::ChapterHeading5, "Ctrl+5");
+        addShortcut(BusinessLayer::TextParagraphType::ChapterHeading6, "Ctrl+6");
         addShortcut(BusinessLayer::TextParagraphType::Text, "Ctrl+7");
         addShortcut(BusinessLayer::TextParagraphType::InlineNote, "Ctrl+Esc");
         //
+        defaultValues.insert(kComponentsSimpleTextAvailableKey, true);
+        //
         defaultValues.insert(kComponentsSimpleTextEditorDefaultTemplateKey, "mono_cp_a4");
         //
-        // Параметры навигатора сценария
+        // Параметры навигатора простого текстового документа
         //
         defaultValues.insert(kComponentsSimpleTextNavigatorShowSceneTextKey, true);
         defaultValues.insert(kComponentsSimpleTextNavigatorSceneTextLinesKey, 1);
     }
     //
+    // Параметры редактора тритмента
+    //
+    {
+        auto addTreatmentEditorStylesAction
+            = [this](const QString& _actionType, const QString& _actionKey, TextParagraphType _from,
+                     TextParagraphType _to) {
+                  defaultValues.insert(QString("%1/styles-%2/from-%3-by-%4")
+                                           .arg(kComponentsTreatmentEditorKey, _actionType,
+                                                toString(_from), _actionKey),
+                                       toString(_to));
+              };
+        auto addTreatmentEditorStylesActionByTab
+            = [addTreatmentEditorStylesAction](const QString& _actionType, TextParagraphType _from,
+                                               TextParagraphType _to) {
+                  addTreatmentEditorStylesAction(_actionType, "tab", _from, _to);
+              };
+        auto addTreatmentEditorStylesActionByEnter
+            = [addTreatmentEditorStylesAction](const QString& _actionType, TextParagraphType _from,
+                                               TextParagraphType _to) {
+                  addTreatmentEditorStylesAction(_actionType, "enter", _from, _to);
+              };
+        //
+        auto addTreatmentEditorStylesJumpByTab =
+            [addTreatmentEditorStylesActionByTab](TextParagraphType _from, TextParagraphType _to) {
+                addTreatmentEditorStylesActionByTab("jumping", _from, _to);
+            };
+        auto addTreatmentEditorStylesJumpByEnter
+            = [addTreatmentEditorStylesActionByEnter](TextParagraphType _from,
+                                                      TextParagraphType _to) {
+                  addTreatmentEditorStylesActionByEnter("jumping", _from, _to);
+              };
+        addTreatmentEditorStylesJumpByTab(TextParagraphType::SceneHeading,
+                                          TextParagraphType::SceneCharacters);
+        addTreatmentEditorStylesJumpByEnter(TextParagraphType::SceneHeading,
+                                            TextParagraphType::BeatHeading);
+        addTreatmentEditorStylesJumpByTab(TextParagraphType::SceneCharacters,
+                                          TextParagraphType::BeatHeading);
+        addTreatmentEditorStylesJumpByEnter(TextParagraphType::SceneCharacters,
+                                            TextParagraphType::BeatHeading);
+        addTreatmentEditorStylesJumpByTab(TextParagraphType::BeatHeading,
+                                          TextParagraphType::BeatHeading);
+        addTreatmentEditorStylesJumpByEnter(TextParagraphType::BeatHeading,
+                                            TextParagraphType::BeatHeading);
+        addTreatmentEditorStylesJumpByTab(TextParagraphType::SequenceHeading,
+                                          TextParagraphType::SceneHeading);
+        addTreatmentEditorStylesJumpByEnter(TextParagraphType::SequenceHeading,
+                                            TextParagraphType::SceneHeading);
+        addTreatmentEditorStylesJumpByTab(TextParagraphType::ActHeading,
+                                          TextParagraphType::SequenceHeading);
+        addTreatmentEditorStylesJumpByEnter(TextParagraphType::ActHeading,
+                                            TextParagraphType::SceneHeading);
+        //
+        auto addTreatmentEditorStylesChangeByTab =
+            [addTreatmentEditorStylesActionByTab](TextParagraphType _from, TextParagraphType _to) {
+                addTreatmentEditorStylesActionByTab("changing", _from, _to);
+            };
+        auto addTreatmentEditorStylesChangeByEnter
+            = [addTreatmentEditorStylesActionByEnter](TextParagraphType _from,
+                                                      TextParagraphType _to) {
+                  addTreatmentEditorStylesActionByEnter("changing", _from, _to);
+              };
+        addTreatmentEditorStylesChangeByTab(TextParagraphType::SceneHeading,
+                                            TextParagraphType::BeatHeading);
+        addTreatmentEditorStylesChangeByEnter(TextParagraphType::SceneHeading,
+                                              TextParagraphType::SceneHeading);
+        addTreatmentEditorStylesChangeByTab(TextParagraphType::SceneCharacters,
+                                            TextParagraphType::BeatHeading);
+        addTreatmentEditorStylesChangeByEnter(TextParagraphType::SceneCharacters,
+                                              TextParagraphType::SceneCharacters);
+        addTreatmentEditorStylesChangeByTab(TextParagraphType::BeatHeading,
+                                            TextParagraphType::BeatHeading);
+        addTreatmentEditorStylesChangeByEnter(TextParagraphType::BeatHeading,
+                                              TextParagraphType::SceneHeading);
+        addTreatmentEditorStylesChangeByTab(TextParagraphType::SequenceHeading,
+                                            TextParagraphType::SequenceHeading);
+        addTreatmentEditorStylesChangeByEnter(TextParagraphType::SequenceHeading,
+                                              TextParagraphType::SequenceHeading);
+        addTreatmentEditorStylesChangeByTab(TextParagraphType::ActHeading,
+                                            TextParagraphType::ActHeading);
+        addTreatmentEditorStylesChangeByEnter(TextParagraphType::ActHeading,
+                                              TextParagraphType::ActHeading);
+        //
+        auto addShortcut
+            = [this](BusinessLayer::TextParagraphType _type, const QString& _shortcut) {
+                  defaultValues.insert(
+                      QString("%1/shortcuts/%2")
+                          .arg(kComponentsTreatmentEditorKey, BusinessLayer::toString(_type)),
+                      QKeySequence(_shortcut).toString(QKeySequence::NativeText));
+              };
+        addShortcut(BusinessLayer::TextParagraphType::SceneHeading, "Ctrl+1");
+        addShortcut(BusinessLayer::TextParagraphType::SceneCharacters, "Ctrl+2");
+        addShortcut(BusinessLayer::TextParagraphType::BeatHeading, "Ctrl+3");
+        addShortcut(BusinessLayer::TextParagraphType::SequenceHeading, "Ctrl+Space");
+        addShortcut(BusinessLayer::TextParagraphType::ActHeading, "Ctrl+Shift+Space");
+    }
+    //
     // Параметры редактора сценария
     //
     {
-        const QString kScreenplayEditorKey = "screenplay-editor";
-        auto addSimpletextEditorStylesAction
-                = [this, kScreenplayEditorKey] (const QString& _actionType, const QString& _actionKey,
-                  ScreenplayParagraphType _from, ScreenplayParagraphType _to) {
-            defaultValues.insert(
-                        QString("%1/styles-%2/from-%3-by-%4").arg(kScreenplayEditorKey, _actionType, toString(_from), _actionKey),
-                        toString(_to));
-        };
-        auto addSimpletextEditorStylesActionByTab
-                = [addSimpletextEditorStylesAction] (const QString& _actionType,
-                  ScreenplayParagraphType _from, ScreenplayParagraphType _to) {
-            addSimpletextEditorStylesAction(_actionType, "tab", _from, _to);
-        };
-        auto addSimpletextEditorStylesActionByEnter
-                = [addSimpletextEditorStylesAction] (const QString& _actionType,
-                  ScreenplayParagraphType _from, ScreenplayParagraphType _to) {
-            addSimpletextEditorStylesAction(_actionType, "enter", _from, _to);
-        };
+        auto addScreenplayEditorStylesAction
+            = [this](const QString& _actionType, const QString& _actionKey, TextParagraphType _from,
+                     TextParagraphType _to) {
+                  defaultValues.insert(QString("%1/styles-%2/from-%3-by-%4")
+                                           .arg(kComponentsScreenplayEditorKey, _actionType,
+                                                toString(_from), _actionKey),
+                                       toString(_to));
+              };
+        auto addScreenplayEditorStylesActionByTab
+            = [addScreenplayEditorStylesAction](const QString& _actionType, TextParagraphType _from,
+                                                TextParagraphType _to) {
+                  addScreenplayEditorStylesAction(_actionType, "tab", _from, _to);
+              };
+        auto addScreenplayEditorStylesActionByEnter
+            = [addScreenplayEditorStylesAction](const QString& _actionType, TextParagraphType _from,
+                                                TextParagraphType _to) {
+                  addScreenplayEditorStylesAction(_actionType, "enter", _from, _to);
+              };
         //
-        auto addSimpletextEditorStylesJumpByTab
-                = [addSimpletextEditorStylesActionByTab] (ScreenplayParagraphType _from, ScreenplayParagraphType _to) {
-            addSimpletextEditorStylesActionByTab("jumping", _from, _to);
-        };
-        auto addSimpletextEditorStylesJumpByEnter
-                = [addSimpletextEditorStylesActionByEnter] (ScreenplayParagraphType _from, ScreenplayParagraphType _to) {
-            addSimpletextEditorStylesActionByEnter("jumping", _from, _to);
-        };
-        addSimpletextEditorStylesJumpByTab(ScreenplayParagraphType::UnformattedText,
-                                           ScreenplayParagraphType::UnformattedText);
-        addSimpletextEditorStylesJumpByEnter(ScreenplayParagraphType::UnformattedText,
-                                             ScreenplayParagraphType::UnformattedText);
-        addSimpletextEditorStylesJumpByTab(ScreenplayParagraphType::SceneHeading,
-                                           ScreenplayParagraphType::SceneCharacters);
-        addSimpletextEditorStylesJumpByEnter(ScreenplayParagraphType::SceneHeading,
-                                             ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesJumpByTab(ScreenplayParagraphType::SceneCharacters,
-                                           ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesJumpByEnter(ScreenplayParagraphType::SceneCharacters,
-                                             ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesJumpByTab(ScreenplayParagraphType::Action,
-                                           ScreenplayParagraphType::Character);
-        addSimpletextEditorStylesJumpByEnter(ScreenplayParagraphType::Action,
-                                             ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesJumpByTab(ScreenplayParagraphType::Character,
-                                           ScreenplayParagraphType::Parenthetical);
-        addSimpletextEditorStylesJumpByEnter(ScreenplayParagraphType::Character,
-                                             ScreenplayParagraphType::Dialogue);
-        addSimpletextEditorStylesJumpByTab(ScreenplayParagraphType::Parenthetical,
-                                           ScreenplayParagraphType::Dialogue);
-        addSimpletextEditorStylesJumpByEnter(ScreenplayParagraphType::Parenthetical,
-                                             ScreenplayParagraphType::Dialogue);
-        addSimpletextEditorStylesJumpByTab(ScreenplayParagraphType::Dialogue,
-                                           ScreenplayParagraphType::Parenthetical);
-        addSimpletextEditorStylesJumpByEnter(ScreenplayParagraphType::Dialogue,
-                                             ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesJumpByTab(ScreenplayParagraphType::Lyrics,
-                                           ScreenplayParagraphType::Parenthetical);
-        addSimpletextEditorStylesJumpByEnter(ScreenplayParagraphType::Lyrics,
-                                             ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesJumpByTab(ScreenplayParagraphType::Transition,
-                                           ScreenplayParagraphType::SceneHeading);
-        addSimpletextEditorStylesJumpByEnter(ScreenplayParagraphType::Transition,
-                                             ScreenplayParagraphType::SceneHeading);
-        addSimpletextEditorStylesJumpByTab(ScreenplayParagraphType::Shot,
-                                           ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesJumpByEnter(ScreenplayParagraphType::Shot,
-                                             ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesJumpByTab(ScreenplayParagraphType::InlineNote,
-                                           ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesJumpByEnter(ScreenplayParagraphType::InlineNote,
-                                             ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesJumpByTab(ScreenplayParagraphType::FolderHeader,
-                                           ScreenplayParagraphType::SceneHeading);
-        addSimpletextEditorStylesJumpByEnter(ScreenplayParagraphType::FolderHeader,
-                                             ScreenplayParagraphType::SceneHeading);
+        auto addScreenplayEditorStylesJumpByTab =
+            [addScreenplayEditorStylesActionByTab](TextParagraphType _from, TextParagraphType _to) {
+                addScreenplayEditorStylesActionByTab("jumping", _from, _to);
+            };
+        auto addScreenplayEditorStylesJumpByEnter
+            = [addScreenplayEditorStylesActionByEnter](TextParagraphType _from,
+                                                       TextParagraphType _to) {
+                  addScreenplayEditorStylesActionByEnter("jumping", _from, _to);
+              };
+        addScreenplayEditorStylesJumpByTab(TextParagraphType::UnformattedText,
+                                           TextParagraphType::UnformattedText);
+        addScreenplayEditorStylesJumpByEnter(TextParagraphType::UnformattedText,
+                                             TextParagraphType::UnformattedText);
+        addScreenplayEditorStylesJumpByTab(TextParagraphType::SceneHeading,
+                                           TextParagraphType::SceneCharacters);
+        addScreenplayEditorStylesJumpByEnter(TextParagraphType::SceneHeading,
+                                             TextParagraphType::Action);
+        addScreenplayEditorStylesJumpByTab(TextParagraphType::SceneCharacters,
+                                           TextParagraphType::Action);
+        addScreenplayEditorStylesJumpByEnter(TextParagraphType::SceneCharacters,
+                                             TextParagraphType::Action);
+        addScreenplayEditorStylesJumpByTab(TextParagraphType::Action, TextParagraphType::Character);
+        addScreenplayEditorStylesJumpByEnter(TextParagraphType::Action, TextParagraphType::Action);
+        addScreenplayEditorStylesJumpByTab(TextParagraphType::Character,
+                                           TextParagraphType::Parenthetical);
+        addScreenplayEditorStylesJumpByEnter(TextParagraphType::Character,
+                                             TextParagraphType::Dialogue);
+        addScreenplayEditorStylesJumpByTab(TextParagraphType::Parenthetical,
+                                           TextParagraphType::Dialogue);
+        addScreenplayEditorStylesJumpByEnter(TextParagraphType::Parenthetical,
+                                             TextParagraphType::Dialogue);
+        addScreenplayEditorStylesJumpByTab(TextParagraphType::Dialogue,
+                                           TextParagraphType::Parenthetical);
+        addScreenplayEditorStylesJumpByEnter(TextParagraphType::Dialogue,
+                                             TextParagraphType::Action);
+        addScreenplayEditorStylesJumpByTab(TextParagraphType::Lyrics,
+                                           TextParagraphType::Parenthetical);
+        addScreenplayEditorStylesJumpByEnter(TextParagraphType::Lyrics, TextParagraphType::Action);
+        addScreenplayEditorStylesJumpByTab(TextParagraphType::Transition,
+                                           TextParagraphType::SceneHeading);
+        addScreenplayEditorStylesJumpByEnter(TextParagraphType::Transition,
+                                             TextParagraphType::SceneHeading);
+        addScreenplayEditorStylesJumpByTab(TextParagraphType::Shot, TextParagraphType::Action);
+        addScreenplayEditorStylesJumpByEnter(TextParagraphType::Shot, TextParagraphType::Action);
+        addScreenplayEditorStylesJumpByTab(TextParagraphType::InlineNote,
+                                           TextParagraphType::Action);
+        addScreenplayEditorStylesJumpByEnter(TextParagraphType::InlineNote,
+                                             TextParagraphType::Action);
+        addScreenplayEditorStylesJumpByTab(TextParagraphType::SequenceHeading,
+                                           TextParagraphType::SceneHeading);
+        addScreenplayEditorStylesJumpByEnter(TextParagraphType::SequenceHeading,
+                                             TextParagraphType::SceneHeading);
+        addScreenplayEditorStylesJumpByTab(TextParagraphType::ActHeading,
+                                           TextParagraphType::SequenceHeading);
+        addScreenplayEditorStylesJumpByEnter(TextParagraphType::ActHeading,
+                                             TextParagraphType::SceneHeading);
         //
-        auto addSimpletextEditorStylesChangeByTab
-                = [addSimpletextEditorStylesActionByTab] (ScreenplayParagraphType _from, ScreenplayParagraphType _to) {
-            addSimpletextEditorStylesActionByTab("changing", _from, _to);
-        };
-        auto addSimpletextEditorStylesChangeByEnter
-                = [addSimpletextEditorStylesActionByEnter] (ScreenplayParagraphType _from, ScreenplayParagraphType _to) {
-            addSimpletextEditorStylesActionByEnter("changing", _from, _to);
-        };
-        addSimpletextEditorStylesChangeByTab(ScreenplayParagraphType::UnformattedText,
-                                             ScreenplayParagraphType::UnformattedText);
-        addSimpletextEditorStylesChangeByEnter(ScreenplayParagraphType::UnformattedText,
-                                               ScreenplayParagraphType::UnformattedText);
-        addSimpletextEditorStylesChangeByTab(ScreenplayParagraphType::SceneHeading,
-                                             ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesChangeByEnter(ScreenplayParagraphType::SceneHeading,
-                                               ScreenplayParagraphType::SceneHeading);
-        addSimpletextEditorStylesChangeByTab(ScreenplayParagraphType::SceneCharacters,
-                                             ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesChangeByEnter(ScreenplayParagraphType::SceneCharacters,
-                                               ScreenplayParagraphType::SceneCharacters);
-        addSimpletextEditorStylesChangeByTab(ScreenplayParagraphType::Action,
-                                             ScreenplayParagraphType::Character);
-        addSimpletextEditorStylesChangeByEnter(ScreenplayParagraphType::Action,
-                                               ScreenplayParagraphType::SceneHeading);
-        addSimpletextEditorStylesChangeByTab(ScreenplayParagraphType::Character,
-                                             ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesChangeByEnter(ScreenplayParagraphType::Character,
-                                               ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesChangeByTab(ScreenplayParagraphType::Parenthetical,
-                                             ScreenplayParagraphType::Dialogue);
-        addSimpletextEditorStylesChangeByEnter(ScreenplayParagraphType::Parenthetical,
-                                               ScreenplayParagraphType::Parenthetical);
-        addSimpletextEditorStylesChangeByTab(ScreenplayParagraphType::Dialogue,
-                                             ScreenplayParagraphType::Parenthetical);
-        addSimpletextEditorStylesChangeByEnter(ScreenplayParagraphType::Dialogue,
-                                               ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesChangeByTab(ScreenplayParagraphType::Lyrics,
-                                             ScreenplayParagraphType::Parenthetical);
-        addSimpletextEditorStylesChangeByEnter(ScreenplayParagraphType::Lyrics,
-                                               ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesChangeByTab(ScreenplayParagraphType::Transition,
-                                             ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesChangeByEnter(ScreenplayParagraphType::Transition,
-                                               ScreenplayParagraphType::Transition);
-        addSimpletextEditorStylesChangeByTab(ScreenplayParagraphType::Shot,
-                                             ScreenplayParagraphType::Action);
-        addSimpletextEditorStylesChangeByEnter(ScreenplayParagraphType::Shot,
-                                               ScreenplayParagraphType::Shot);
-        addSimpletextEditorStylesChangeByTab(ScreenplayParagraphType::InlineNote,
-                                             ScreenplayParagraphType::InlineNote);
-        addSimpletextEditorStylesChangeByEnter(ScreenplayParagraphType::InlineNote,
-                                               ScreenplayParagraphType::InlineNote);
-        addSimpletextEditorStylesChangeByTab(ScreenplayParagraphType::FolderHeader,
-                                             ScreenplayParagraphType::FolderHeader);
-        addSimpletextEditorStylesChangeByEnter(ScreenplayParagraphType::FolderHeader,
-                                               ScreenplayParagraphType::FolderHeader);
+        auto addScreenplayEditorStylesChangeByTab =
+            [addScreenplayEditorStylesActionByTab](TextParagraphType _from, TextParagraphType _to) {
+                addScreenplayEditorStylesActionByTab("changing", _from, _to);
+            };
+        auto addScreenplayEditorStylesChangeByEnter
+            = [addScreenplayEditorStylesActionByEnter](TextParagraphType _from,
+                                                       TextParagraphType _to) {
+                  addScreenplayEditorStylesActionByEnter("changing", _from, _to);
+              };
+        addScreenplayEditorStylesChangeByTab(TextParagraphType::UnformattedText,
+                                             TextParagraphType::UnformattedText);
+        addScreenplayEditorStylesChangeByEnter(TextParagraphType::UnformattedText,
+                                               TextParagraphType::UnformattedText);
+        addScreenplayEditorStylesChangeByTab(TextParagraphType::SceneHeading,
+                                             TextParagraphType::Action);
+        addScreenplayEditorStylesChangeByEnter(TextParagraphType::SceneHeading,
+                                               TextParagraphType::SceneHeading);
+        addScreenplayEditorStylesChangeByTab(TextParagraphType::SceneCharacters,
+                                             TextParagraphType::Action);
+        addScreenplayEditorStylesChangeByEnter(TextParagraphType::SceneCharacters,
+                                               TextParagraphType::SceneCharacters);
+        addScreenplayEditorStylesChangeByTab(TextParagraphType::Action,
+                                             TextParagraphType::Character);
+        addScreenplayEditorStylesChangeByEnter(TextParagraphType::Action,
+                                               TextParagraphType::SceneHeading);
+        addScreenplayEditorStylesChangeByTab(TextParagraphType::Character,
+                                             TextParagraphType::Action);
+        addScreenplayEditorStylesChangeByEnter(TextParagraphType::Character,
+                                               TextParagraphType::Action);
+        addScreenplayEditorStylesChangeByTab(TextParagraphType::Parenthetical,
+                                             TextParagraphType::Dialogue);
+        addScreenplayEditorStylesChangeByEnter(TextParagraphType::Parenthetical,
+                                               TextParagraphType::Parenthetical);
+        addScreenplayEditorStylesChangeByTab(TextParagraphType::Dialogue,
+                                             TextParagraphType::Parenthetical);
+        addScreenplayEditorStylesChangeByEnter(TextParagraphType::Dialogue,
+                                               TextParagraphType::Action);
+        addScreenplayEditorStylesChangeByTab(TextParagraphType::Lyrics,
+                                             TextParagraphType::Parenthetical);
+        addScreenplayEditorStylesChangeByEnter(TextParagraphType::Lyrics,
+                                               TextParagraphType::Action);
+        addScreenplayEditorStylesChangeByTab(TextParagraphType::Transition,
+                                             TextParagraphType::Action);
+        addScreenplayEditorStylesChangeByEnter(TextParagraphType::Transition,
+                                               TextParagraphType::Transition);
+        addScreenplayEditorStylesChangeByTab(TextParagraphType::Shot, TextParagraphType::Action);
+        addScreenplayEditorStylesChangeByEnter(TextParagraphType::Shot, TextParagraphType::Shot);
+        addScreenplayEditorStylesChangeByTab(TextParagraphType::InlineNote,
+                                             TextParagraphType::InlineNote);
+        addScreenplayEditorStylesChangeByEnter(TextParagraphType::InlineNote,
+                                               TextParagraphType::InlineNote);
+        addScreenplayEditorStylesChangeByTab(TextParagraphType::SequenceHeading,
+                                             TextParagraphType::SequenceHeading);
+        addScreenplayEditorStylesChangeByEnter(TextParagraphType::SequenceHeading,
+                                               TextParagraphType::SequenceHeading);
+        addScreenplayEditorStylesChangeByTab(TextParagraphType::ActHeading,
+                                             TextParagraphType::ActHeading);
+        addScreenplayEditorStylesChangeByEnter(TextParagraphType::ActHeading,
+                                               TextParagraphType::ActHeading);
         //
-        auto addShortcut = [this, kScreenplayEditorKey] (BusinessLayer::ScreenplayParagraphType _type,
-                           const QString& _shortcut) {
-            defaultValues.insert(
-                        QString("%1/shortcuts/%2").arg(kScreenplayEditorKey, BusinessLayer::toString(_type)),
-                        QKeySequence(_shortcut).toString(QKeySequence::NativeText));
-        };
-        addShortcut(BusinessLayer::ScreenplayParagraphType::UnformattedText, "Ctrl+0");
-        addShortcut(BusinessLayer::ScreenplayParagraphType::SceneHeading, "Ctrl+1");
-        addShortcut(BusinessLayer::ScreenplayParagraphType::SceneCharacters, "Ctrl+2");
-        addShortcut(BusinessLayer::ScreenplayParagraphType::Action, "Ctrl+3");
-        addShortcut(BusinessLayer::ScreenplayParagraphType::Character, "Ctrl+4");
-        addShortcut(BusinessLayer::ScreenplayParagraphType::Parenthetical, "Ctrl+5");
-        addShortcut(BusinessLayer::ScreenplayParagraphType::Dialogue, "Ctrl+6");
-        addShortcut(BusinessLayer::ScreenplayParagraphType::Lyrics, "Ctrl+7");
-        addShortcut(BusinessLayer::ScreenplayParagraphType::Shot, "Ctrl+8");
-        addShortcut(BusinessLayer::ScreenplayParagraphType::Transition, "Ctrl+9");
-        addShortcut(BusinessLayer::ScreenplayParagraphType::InlineNote, "Ctrl+Esc");
-        addShortcut(BusinessLayer::ScreenplayParagraphType::FolderHeader, "Ctrl+Space");
+        auto addShortcut
+            = [this](BusinessLayer::TextParagraphType _type, const QString& _shortcut) {
+                  defaultValues.insert(
+                      QString("%1/shortcuts/%2")
+                          .arg(kComponentsScreenplayEditorKey, BusinessLayer::toString(_type)),
+                      QKeySequence(_shortcut).toString(QKeySequence::NativeText));
+              };
+        addShortcut(BusinessLayer::TextParagraphType::UnformattedText, "Ctrl+0");
+        addShortcut(BusinessLayer::TextParagraphType::SceneHeading, "Ctrl+1");
+        addShortcut(BusinessLayer::TextParagraphType::SceneCharacters, "Ctrl+2");
+        addShortcut(BusinessLayer::TextParagraphType::Action, "Ctrl+3");
+        addShortcut(BusinessLayer::TextParagraphType::Character, "Ctrl+4");
+        addShortcut(BusinessLayer::TextParagraphType::Parenthetical, "Ctrl+5");
+        addShortcut(BusinessLayer::TextParagraphType::Dialogue, "Ctrl+6");
+        addShortcut(BusinessLayer::TextParagraphType::Lyrics, "Ctrl+7");
+        addShortcut(BusinessLayer::TextParagraphType::Shot, "Ctrl+8");
+        addShortcut(BusinessLayer::TextParagraphType::Transition, "Ctrl+9");
+        addShortcut(BusinessLayer::TextParagraphType::InlineNote, "Ctrl+Esc");
+        addShortcut(BusinessLayer::TextParagraphType::SequenceHeading, "Ctrl+Space");
+        addShortcut(BusinessLayer::TextParagraphType::ActHeading, "Ctrl+Shift+Space");
+        //
+        defaultValues.insert(kComponentsScreenplayAvailableKey, true);
         //
         defaultValues.insert(kComponentsScreenplayEditorDefaultTemplateKey, "world_cp");
-        defaultValues.insert(kComponentsScreenplayEditorShowSceneNumberOnLeftKey, true);
+        defaultValues.insert(kComponentsScreenplayEditorShowSceneNumbersKey, false);
+        defaultValues.insert(kComponentsScreenplayEditorShowSceneNumbersOnLeftKey, true);
+        defaultValues.insert(kComponentsScreenplayEditorShowSceneNumbersOnRightKey, true);
+        defaultValues.insert(kComponentsScreenplayEditorContinueDialogueKey, true);
+        defaultValues.insert(kComponentsScreenplayEditorCorrectTextOnPageBreaksKey, true);
+        defaultValues.insert(kComponentsScreenplayEditorUseCharactersFromTextKey, false);
+        defaultValues.insert(kComponentsScreenplayEditorShowCharacterSuggestionsInEmptyBlockKey,
+                             true);
         //
         // Параметры навигатора сценария
         //
+        defaultValues.insert(kComponentsScreenplayNavigatorShowBeatsKey, true);
+        defaultValues.insert(kComponentsScreenplayNavigatorShowBeatsInTreatmentKey, true);
+        defaultValues.insert(kComponentsScreenplayNavigatorShowBeatsInScreenplayKey, false);
         defaultValues.insert(kComponentsScreenplayNavigatorShowSceneNumberKey, true);
         defaultValues.insert(kComponentsScreenplayNavigatorShowSceneTextKey, true);
         defaultValues.insert(kComponentsScreenplayNavigatorSceneTextLinesKey, 1);
@@ -400,6 +531,409 @@ SettingsStorage::Implementation::Implementation()
         defaultValues.insert(kComponentsScreenplayDurationByCharactersCharactersKey, 1350);
         defaultValues.insert(kComponentsScreenplayDurationByCharactersIncludeSpacesKey, true);
         defaultValues.insert(kComponentsScreenplayDurationByCharactersDurationKey, 60);
+        defaultValues.insert(
+            kComponentsScreenplayDurationConfigurableSecondsPerParagraphForActionKey, 1.0);
+        defaultValues.insert(kComponentsScreenplayDurationConfigurableSecondsPerEvery50ForActionKey,
+                             1.5);
+        defaultValues.insert(
+            kComponentsScreenplayDurationConfigurableSecondsPerParagraphForDialogueKey, 2.0);
+        defaultValues.insert(
+            kComponentsScreenplayDurationConfigurableSecondsPerEvery50ForDialogueKey, 2.4);
+        defaultValues.insert(
+            kComponentsScreenplayDurationConfigurableSecondsPerParagraphForSceneHeadingKey, 2.0);
+        defaultValues.insert(
+            kComponentsScreenplayDurationConfigurableSecondsPerEvery50ForSceneHeadingKey, 0.0);
+        //
+        // Параметры карточек сценария
+        //
+        defaultValues.insert(kComponentsScreenplayCardsLockCardsKey, true);
+        defaultValues.insert(kComponentsScreenplayCardsArrangeByRowsKey, true);
+        defaultValues.insert(kComponentsScreenplayCardsCardsSizeKey, 10);
+        defaultValues.insert(kComponentsScreenplayCardsCardsRatioKey, 2);
+        defaultValues.insert(kComponentsScreenplayCardsCardsSpacingKey, 20);
+        defaultValues.insert(kComponentsScreenplayCardsCardsInRowKey, -1);
+    }
+    //
+    // Параметры редактора комикса
+    //
+    {
+        const QString kComicBookEditorKey = "comicbook-editor";
+        auto addComicBookEditorStylesAction
+            = [this, kComicBookEditorKey](const QString& _actionType, const QString& _actionKey,
+                                          TextParagraphType _from, TextParagraphType _to) {
+                  defaultValues.insert(
+                      QString("%1/styles-%2/from-%3-by-%4")
+                          .arg(kComicBookEditorKey, _actionType, toString(_from), _actionKey),
+                      toString(_to));
+              };
+        auto addComicBookEditorStylesActionByTab
+            = [addComicBookEditorStylesAction](const QString& _actionType, TextParagraphType _from,
+                                               TextParagraphType _to) {
+                  addComicBookEditorStylesAction(_actionType, "tab", _from, _to);
+              };
+        auto addComicBookEditorStylesActionByEnter
+            = [addComicBookEditorStylesAction](const QString& _actionType, TextParagraphType _from,
+                                               TextParagraphType _to) {
+                  addComicBookEditorStylesAction(_actionType, "enter", _from, _to);
+              };
+        //
+        auto addComicBookEditorStylesJumpByTab =
+            [addComicBookEditorStylesActionByTab](TextParagraphType _from, TextParagraphType _to) {
+                addComicBookEditorStylesActionByTab("jumping", _from, _to);
+            };
+        auto addComicBookEditorStylesJumpByEnter
+            = [addComicBookEditorStylesActionByEnter](TextParagraphType _from,
+                                                      TextParagraphType _to) {
+                  addComicBookEditorStylesActionByEnter("jumping", _from, _to);
+              };
+        addComicBookEditorStylesJumpByTab(TextParagraphType::UnformattedText,
+                                          TextParagraphType::UnformattedText);
+        addComicBookEditorStylesJumpByEnter(TextParagraphType::UnformattedText,
+                                            TextParagraphType::UnformattedText);
+        addComicBookEditorStylesJumpByTab(TextParagraphType::PageHeading,
+                                          TextParagraphType::PanelHeading);
+        addComicBookEditorStylesJumpByEnter(TextParagraphType::PageHeading,
+                                            TextParagraphType::PanelHeading);
+        addComicBookEditorStylesJumpByTab(TextParagraphType::PanelHeading,
+                                          TextParagraphType::Character);
+        addComicBookEditorStylesJumpByEnter(TextParagraphType::PanelHeading,
+                                            TextParagraphType::Description);
+        addComicBookEditorStylesJumpByTab(TextParagraphType::Description,
+                                          TextParagraphType::Character);
+        addComicBookEditorStylesJumpByEnter(TextParagraphType::Description,
+                                            TextParagraphType::Description);
+        addComicBookEditorStylesJumpByTab(TextParagraphType::Character,
+                                          TextParagraphType::Dialogue);
+        addComicBookEditorStylesJumpByEnter(TextParagraphType::Character,
+                                            TextParagraphType::Dialogue);
+        addComicBookEditorStylesJumpByTab(TextParagraphType::Dialogue,
+                                          TextParagraphType::Character);
+        addComicBookEditorStylesJumpByEnter(TextParagraphType::Dialogue,
+                                            TextParagraphType::Description);
+        addComicBookEditorStylesJumpByTab(TextParagraphType::InlineNote,
+                                          TextParagraphType::Description);
+        addComicBookEditorStylesJumpByEnter(TextParagraphType::InlineNote,
+                                            TextParagraphType::Description);
+        //
+        auto addComicBookEditorStylesChangeByTab =
+            [addComicBookEditorStylesActionByTab](TextParagraphType _from, TextParagraphType _to) {
+                addComicBookEditorStylesActionByTab("changing", _from, _to);
+            };
+        auto addComicBookEditorStylesChangeByEnter
+            = [addComicBookEditorStylesActionByEnter](TextParagraphType _from,
+                                                      TextParagraphType _to) {
+                  addComicBookEditorStylesActionByEnter("changing", _from, _to);
+              };
+        addComicBookEditorStylesChangeByTab(TextParagraphType::UnformattedText,
+                                            TextParagraphType::UnformattedText);
+        addComicBookEditorStylesChangeByEnter(TextParagraphType::UnformattedText,
+                                              TextParagraphType::UnformattedText);
+        addComicBookEditorStylesChangeByTab(TextParagraphType::PageHeading,
+                                            TextParagraphType::PanelHeading);
+        addComicBookEditorStylesChangeByEnter(TextParagraphType::PageHeading,
+                                              TextParagraphType::PageHeading);
+        addComicBookEditorStylesChangeByTab(TextParagraphType::PanelHeading,
+                                            TextParagraphType::Description);
+        addComicBookEditorStylesChangeByEnter(TextParagraphType::PanelHeading,
+                                              TextParagraphType::PageHeading);
+        addComicBookEditorStylesChangeByTab(TextParagraphType::Description,
+                                            TextParagraphType::Character);
+        addComicBookEditorStylesChangeByEnter(TextParagraphType::Description,
+                                              TextParagraphType::PanelHeading);
+        addComicBookEditorStylesChangeByTab(TextParagraphType::Character,
+                                            TextParagraphType::Description);
+        addComicBookEditorStylesChangeByEnter(TextParagraphType::Character,
+                                              TextParagraphType::Description);
+        addComicBookEditorStylesChangeByTab(TextParagraphType::Dialogue,
+                                            TextParagraphType::Character);
+        addComicBookEditorStylesChangeByEnter(TextParagraphType::Dialogue,
+                                              TextParagraphType::Description);
+        addComicBookEditorStylesChangeByTab(TextParagraphType::InlineNote,
+                                            TextParagraphType::InlineNote);
+        addComicBookEditorStylesChangeByEnter(TextParagraphType::InlineNote,
+                                              TextParagraphType::InlineNote);
+        //
+        auto addShortcut = [this, kComicBookEditorKey](BusinessLayer::TextParagraphType _type,
+                                                       const QString& _shortcut) {
+            defaultValues.insert(
+                QString("%1/shortcuts/%2").arg(kComicBookEditorKey, BusinessLayer::toString(_type)),
+                QKeySequence(_shortcut).toString(QKeySequence::NativeText));
+        };
+        addShortcut(BusinessLayer::TextParagraphType::UnformattedText, "Ctrl+0");
+        addShortcut(BusinessLayer::TextParagraphType::PageHeading, "Ctrl+1");
+        addShortcut(BusinessLayer::TextParagraphType::PanelHeading, "Ctrl+2");
+        addShortcut(BusinessLayer::TextParagraphType::Description, "Ctrl+3");
+        addShortcut(BusinessLayer::TextParagraphType::Character, "Ctrl+4");
+        addShortcut(BusinessLayer::TextParagraphType::Dialogue, "Ctrl+5");
+        addShortcut(BusinessLayer::TextParagraphType::InlineNote, "Ctrl+Esc");
+        //
+        defaultValues.insert(kComponentsComicBookAvailableKey, true);
+        //
+        defaultValues.insert(kComponentsComicBookEditorDefaultTemplateKey, "world");
+        defaultValues.insert(kComponentsComicBookEditorUseCharactersFromTextKey, false);
+        defaultValues.insert(kComponentsComicBookEditorShowCharacterSuggestionsInEmptyBlockKey,
+                             false);
+        //
+        // Параметры навигатора сценария
+        //
+        defaultValues.insert(kComponentsComicBookNavigatorShowSceneTextKey, true);
+        defaultValues.insert(kComponentsComicBookNavigatorSceneTextLinesKey, 1);
+    }
+    //
+    // Параметры редактора аудиопостановки
+    //
+    {
+        auto addAudioplayEditorStylesAction
+            = [this](const QString& _actionType, const QString& _actionKey, TextParagraphType _from,
+                     TextParagraphType _to) {
+                  defaultValues.insert(QString("%1/styles-%2/from-%3-by-%4")
+                                           .arg(kComponentsAudioplayEditorKey, _actionType,
+                                                toString(_from), _actionKey),
+                                       toString(_to));
+              };
+        auto addAudioplayEditorStylesActionByTab
+            = [addAudioplayEditorStylesAction](const QString& _actionType, TextParagraphType _from,
+                                               TextParagraphType _to) {
+                  addAudioplayEditorStylesAction(_actionType, "tab", _from, _to);
+              };
+        auto addAudioplayEditorStylesActionByEnter
+            = [addAudioplayEditorStylesAction](const QString& _actionType, TextParagraphType _from,
+                                               TextParagraphType _to) {
+                  addAudioplayEditorStylesAction(_actionType, "enter", _from, _to);
+              };
+        //
+        auto addAudioplayEditorStylesJumpByTab =
+            [addAudioplayEditorStylesActionByTab](TextParagraphType _from, TextParagraphType _to) {
+                addAudioplayEditorStylesActionByTab("jumping", _from, _to);
+            };
+        auto addAudioplayEditorStylesJumpByEnter
+            = [addAudioplayEditorStylesActionByEnter](TextParagraphType _from,
+                                                      TextParagraphType _to) {
+                  addAudioplayEditorStylesActionByEnter("jumping", _from, _to);
+              };
+        addAudioplayEditorStylesJumpByTab(TextParagraphType::UnformattedText,
+                                          TextParagraphType::UnformattedText);
+        addAudioplayEditorStylesJumpByEnter(TextParagraphType::UnformattedText,
+                                            TextParagraphType::UnformattedText);
+        addAudioplayEditorStylesJumpByTab(TextParagraphType::SceneHeading, TextParagraphType::Cue);
+        addAudioplayEditorStylesJumpByEnter(TextParagraphType::SceneHeading,
+                                            TextParagraphType::Character);
+        addAudioplayEditorStylesJumpByTab(TextParagraphType::Character,
+                                          TextParagraphType::Dialogue);
+        addAudioplayEditorStylesJumpByEnter(TextParagraphType::Character,
+                                            TextParagraphType::Dialogue);
+        addAudioplayEditorStylesJumpByTab(TextParagraphType::Dialogue, TextParagraphType::Cue);
+        addAudioplayEditorStylesJumpByEnter(TextParagraphType::Dialogue,
+                                            TextParagraphType::Character);
+        addAudioplayEditorStylesJumpByTab(TextParagraphType::Sound, TextParagraphType::Music);
+        addAudioplayEditorStylesJumpByEnter(TextParagraphType::Sound, TextParagraphType::Character);
+        addAudioplayEditorStylesJumpByTab(TextParagraphType::Music, TextParagraphType::Sound);
+        addAudioplayEditorStylesJumpByEnter(TextParagraphType::Music, TextParagraphType::Character);
+        addAudioplayEditorStylesJumpByTab(TextParagraphType::Cue, TextParagraphType::SceneHeading);
+        addAudioplayEditorStylesJumpByEnter(TextParagraphType::Cue, TextParagraphType::Character);
+        addAudioplayEditorStylesJumpByTab(TextParagraphType::InlineNote,
+                                          TextParagraphType::Character);
+        addAudioplayEditorStylesJumpByEnter(TextParagraphType::InlineNote,
+                                            TextParagraphType::Character);
+        //
+        auto addAudioplayEditorStylesChangeByTab =
+            [addAudioplayEditorStylesActionByTab](TextParagraphType _from, TextParagraphType _to) {
+                addAudioplayEditorStylesActionByTab("changing", _from, _to);
+            };
+        auto addAudioplayEditorStylesChangeByEnter
+            = [addAudioplayEditorStylesActionByEnter](TextParagraphType _from,
+                                                      TextParagraphType _to) {
+                  addAudioplayEditorStylesActionByEnter("changing", _from, _to);
+              };
+        addAudioplayEditorStylesChangeByTab(TextParagraphType::UnformattedText,
+                                            TextParagraphType::Character);
+        addAudioplayEditorStylesChangeByEnter(TextParagraphType::UnformattedText,
+                                              TextParagraphType::Character);
+        addAudioplayEditorStylesChangeByTab(TextParagraphType::SceneHeading,
+                                            TextParagraphType::Character);
+        addAudioplayEditorStylesChangeByEnter(TextParagraphType::SceneHeading,
+                                              TextParagraphType::Character);
+        addAudioplayEditorStylesChangeByTab(TextParagraphType::Character, TextParagraphType::Sound);
+        addAudioplayEditorStylesChangeByEnter(TextParagraphType::Character,
+                                              TextParagraphType::SceneHeading);
+        addAudioplayEditorStylesChangeByTab(TextParagraphType::Dialogue, TextParagraphType::Sound);
+        addAudioplayEditorStylesChangeByEnter(TextParagraphType::Dialogue,
+                                              TextParagraphType::SceneHeading);
+        addAudioplayEditorStylesChangeByTab(TextParagraphType::Sound, TextParagraphType::Music);
+        addAudioplayEditorStylesChangeByEnter(TextParagraphType::Sound,
+                                              TextParagraphType::SceneHeading);
+        addAudioplayEditorStylesChangeByTab(TextParagraphType::Music, TextParagraphType::Cue);
+        addAudioplayEditorStylesChangeByEnter(TextParagraphType::Music,
+                                              TextParagraphType::SceneHeading);
+        addAudioplayEditorStylesChangeByTab(TextParagraphType::Cue, TextParagraphType::Character);
+        addAudioplayEditorStylesChangeByEnter(TextParagraphType::Cue,
+                                              TextParagraphType::SceneHeading);
+        addAudioplayEditorStylesChangeByTab(TextParagraphType::InlineNote,
+                                            TextParagraphType::Character);
+        addAudioplayEditorStylesChangeByEnter(TextParagraphType::InlineNote,
+                                              TextParagraphType::Character);
+        //
+        auto addShortcut
+            = [this](BusinessLayer::TextParagraphType _type, const QString& _shortcut) {
+                  defaultValues.insert(
+                      QString("%1/shortcuts/%2")
+                          .arg(kComponentsAudioplayEditorKey, BusinessLayer::toString(_type)),
+                      QKeySequence(_shortcut).toString(QKeySequence::NativeText));
+              };
+        addShortcut(BusinessLayer::TextParagraphType::UnformattedText, "Ctrl+0");
+        addShortcut(BusinessLayer::TextParagraphType::SceneHeading, "Ctrl+1");
+        addShortcut(BusinessLayer::TextParagraphType::Character, "Ctrl+2");
+        addShortcut(BusinessLayer::TextParagraphType::Dialogue, "Ctrl+3");
+        addShortcut(BusinessLayer::TextParagraphType::Sound, "Ctrl+4");
+        addShortcut(BusinessLayer::TextParagraphType::Music, "Ctrl+5");
+        addShortcut(BusinessLayer::TextParagraphType::Cue, "Ctrl+6");
+        addShortcut(BusinessLayer::TextParagraphType::InlineNote, "Ctrl+Esc");
+        //
+        defaultValues.insert(kComponentsAudioplayAvailableKey, true);
+        //
+        defaultValues.insert(kComponentsAudioplayEditorDefaultTemplateKey, "bbc_scene");
+        defaultValues.insert(kComponentsAudioplayEditorShowBlockNumbersKey, false);
+        defaultValues.insert(kComponentsAudioplayEditorContinueBlockNumbersKey, true);
+        defaultValues.insert(kComponentsAudioplayEditorUseCharactersFromTextKey, false);
+        defaultValues.insert(kComponentsAudioplayEditorShowCharacterSuggestionsInEmptyBlockKey,
+                             false);
+        //
+        // Параметры навигатора сценария
+        //
+        defaultValues.insert(kComponentsAudioplayNavigatorShowSceneNumberKey, true);
+        defaultValues.insert(kComponentsAudioplayNavigatorShowSceneTextKey, true);
+        defaultValues.insert(kComponentsAudioplayNavigatorSceneTextLinesKey, 1);
+        //
+        // Параметры хронометража сценария
+        //
+        defaultValues.insert(kComponentsAudioplayDurationByWordsWordsKey, 160);
+        defaultValues.insert(kComponentsAudioplayDurationByWordsDurationKey, 60);
+    }
+    //
+    // Параметры редактора пьес
+    //
+    {
+        auto addStageplayEditorStylesAction
+            = [this](const QString& _actionType, const QString& _actionKey, TextParagraphType _from,
+                     TextParagraphType _to) {
+                  defaultValues.insert(QString("%1/styles-%2/from-%3-by-%4")
+                                           .arg(kComponentsStageplayEditorKey, _actionType,
+                                                toString(_from), _actionKey),
+                                       toString(_to));
+              };
+        auto addStageplayEditorStylesActionByTab
+            = [addStageplayEditorStylesAction](const QString& _actionType, TextParagraphType _from,
+                                               TextParagraphType _to) {
+                  addStageplayEditorStylesAction(_actionType, "tab", _from, _to);
+              };
+        auto addStageplayEditorStylesActionByEnter
+            = [addStageplayEditorStylesAction](const QString& _actionType, TextParagraphType _from,
+                                               TextParagraphType _to) {
+                  addStageplayEditorStylesAction(_actionType, "enter", _from, _to);
+              };
+        //
+        auto addStageplayEditorStylesJumpByTab =
+            [addStageplayEditorStylesActionByTab](TextParagraphType _from, TextParagraphType _to) {
+                addStageplayEditorStylesActionByTab("jumping", _from, _to);
+            };
+        auto addStageplayEditorStylesJumpByEnter
+            = [addStageplayEditorStylesActionByEnter](TextParagraphType _from,
+                                                      TextParagraphType _to) {
+                  addStageplayEditorStylesActionByEnter("jumping", _from, _to);
+              };
+        addStageplayEditorStylesJumpByTab(TextParagraphType::UnformattedText,
+                                          TextParagraphType::UnformattedText);
+        addStageplayEditorStylesJumpByEnter(TextParagraphType::UnformattedText,
+                                            TextParagraphType::UnformattedText);
+        addStageplayEditorStylesJumpByTab(TextParagraphType::SceneHeading,
+                                          TextParagraphType::Action);
+        addStageplayEditorStylesJumpByEnter(TextParagraphType::SceneHeading,
+                                            TextParagraphType::Character);
+        addStageplayEditorStylesJumpByTab(TextParagraphType::Character,
+                                          TextParagraphType::Parenthetical);
+        addStageplayEditorStylesJumpByEnter(TextParagraphType::Character,
+                                            TextParagraphType::Dialogue);
+        addStageplayEditorStylesJumpByTab(TextParagraphType::Parenthetical,
+                                          TextParagraphType::Dialogue);
+        addStageplayEditorStylesJumpByEnter(TextParagraphType::Parenthetical,
+                                            TextParagraphType::Dialogue);
+        addStageplayEditorStylesJumpByTab(TextParagraphType::Dialogue,
+                                          TextParagraphType::Parenthetical);
+        addStageplayEditorStylesJumpByEnter(TextParagraphType::Dialogue,
+                                            TextParagraphType::Character);
+        addStageplayEditorStylesJumpByTab(TextParagraphType::Action,
+                                          TextParagraphType::SceneHeading);
+        addStageplayEditorStylesJumpByEnter(TextParagraphType::Action,
+                                            TextParagraphType::Character);
+        addStageplayEditorStylesJumpByTab(TextParagraphType::InlineNote,
+                                          TextParagraphType::Character);
+        addStageplayEditorStylesJumpByEnter(TextParagraphType::InlineNote,
+                                            TextParagraphType::Character);
+        //
+        auto addStageplayEditorStylesChangeByTab =
+            [addStageplayEditorStylesActionByTab](TextParagraphType _from, TextParagraphType _to) {
+                addStageplayEditorStylesActionByTab("changing", _from, _to);
+            };
+        auto addStageplayEditorStylesChangeByEnter
+            = [addStageplayEditorStylesActionByEnter](TextParagraphType _from,
+                                                      TextParagraphType _to) {
+                  addStageplayEditorStylesActionByEnter("changing", _from, _to);
+              };
+        addStageplayEditorStylesChangeByTab(TextParagraphType::UnformattedText,
+                                            TextParagraphType::Character);
+        addStageplayEditorStylesChangeByEnter(TextParagraphType::UnformattedText,
+                                              TextParagraphType::Character);
+        addStageplayEditorStylesChangeByTab(TextParagraphType::SceneHeading,
+                                            TextParagraphType::Character);
+        addStageplayEditorStylesChangeByEnter(TextParagraphType::SceneHeading,
+                                              TextParagraphType::Character);
+        addStageplayEditorStylesChangeByTab(TextParagraphType::Character,
+                                            TextParagraphType::Action);
+        addStageplayEditorStylesChangeByEnter(TextParagraphType::Character,
+                                              TextParagraphType::SceneHeading);
+        addStageplayEditorStylesChangeByTab(TextParagraphType::Parenthetical,
+                                            TextParagraphType::Dialogue);
+        addStageplayEditorStylesChangeByEnter(TextParagraphType::Parenthetical,
+                                              TextParagraphType::Dialogue);
+        addStageplayEditorStylesChangeByTab(TextParagraphType::Dialogue, TextParagraphType::Action);
+        addStageplayEditorStylesChangeByEnter(TextParagraphType::Dialogue,
+                                              TextParagraphType::SceneHeading);
+        addStageplayEditorStylesChangeByTab(TextParagraphType::Action,
+                                            TextParagraphType::Character);
+        addStageplayEditorStylesChangeByEnter(TextParagraphType::Action,
+                                              TextParagraphType::Character);
+        addStageplayEditorStylesChangeByTab(TextParagraphType::InlineNote,
+                                            TextParagraphType::Character);
+        addStageplayEditorStylesChangeByEnter(TextParagraphType::InlineNote,
+                                              TextParagraphType::Character);
+        //
+        auto addShortcut
+            = [this](BusinessLayer::TextParagraphType _type, const QString& _shortcut) {
+                  defaultValues.insert(
+                      QString("%1/shortcuts/%2")
+                          .arg(kComponentsStageplayEditorKey, BusinessLayer::toString(_type)),
+                      QKeySequence(_shortcut).toString(QKeySequence::NativeText));
+              };
+        addShortcut(BusinessLayer::TextParagraphType::UnformattedText, "Ctrl+0");
+        addShortcut(BusinessLayer::TextParagraphType::SceneHeading, "Ctrl+1");
+        addShortcut(BusinessLayer::TextParagraphType::Character, "Ctrl+2");
+        addShortcut(BusinessLayer::TextParagraphType::Parenthetical, "Ctrl+3");
+        addShortcut(BusinessLayer::TextParagraphType::Dialogue, "Ctrl+4");
+        addShortcut(BusinessLayer::TextParagraphType::Action, "Ctrl+5");
+        addShortcut(BusinessLayer::TextParagraphType::InlineNote, "Ctrl+Esc");
+        //
+        defaultValues.insert(kComponentsStageplayAvailableKey, true);
+        //
+        defaultValues.insert(kComponentsStageplayEditorDefaultTemplateKey, "bbc");
+        defaultValues.insert(kComponentsStageplayEditorUseCharactersFromTextKey, false);
+        defaultValues.insert(kComponentsStageplayEditorShowCharacterSuggestionsInEmptyBlockKey,
+                             false);
+        //
+        // Параметры навигатора сценария
+        //
+        defaultValues.insert(kComponentsStageplayNavigatorShowSceneNumberKey, true);
+        defaultValues.insert(kComponentsStageplayNavigatorShowSceneTextKey, true);
+        defaultValues.insert(kComponentsStageplayNavigatorSceneTextLinesKey, 1);
     }
 
 
@@ -407,19 +941,20 @@ SettingsStorage::Implementation::Implementation()
 }
 
 QVariant SettingsStorage::Implementation::cachedValue(const QString& _key,
-    SettingsStorage::SettingsPlace _settingsPlace, bool& _ok) const
+                                                      SettingsStorage::SettingsPlace _settingsPlace,
+                                                      bool& _ok) const
 {
     const QVariantMap& cachedValues
-            = _settingsPlace == SettingsPlace::Application ? cachedValuesApp : cachedValuesDb;
+        = _settingsPlace == SettingsPlace::Application ? cachedValuesApp : cachedValuesDb;
     _ok = cachedValues.contains(_key);
     return cachedValuesApp.value(_key);
 }
 
 void SettingsStorage::Implementation::cacheValue(const QString& _key, const QVariant& _value,
-    SettingsStorage::SettingsPlace _settingsPlace)
+                                                 SettingsStorage::SettingsPlace _settingsPlace)
 {
     QVariantMap& cachedValues
-            = _settingsPlace == SettingsPlace::Application ? cachedValuesApp : cachedValuesDb;
+        = _settingsPlace == SettingsPlace::Application ? cachedValuesApp : cachedValuesDb;
     cachedValues.insert(_key, _value);
 }
 
@@ -430,8 +965,12 @@ void SettingsStorage::Implementation::cacheValue(const QString& _key, const QVar
 SettingsStorage::~SettingsStorage() = default;
 
 void SettingsStorage::setValue(const QString& _key, const QVariant& _value,
-    SettingsStorage::SettingsPlace _settingsPlace)
+                               SettingsStorage::SettingsPlace _settingsPlace)
 {
+    if (d->isReadOnly) {
+        return;
+    }
+
     //
     // Кэшируем значение
     //
@@ -449,8 +988,12 @@ void SettingsStorage::setValue(const QString& _key, const QVariant& _value,
 }
 
 void SettingsStorage::setValues(const QString& _valuesGroup, const QVariantMap& _values,
-    SettingsStorage::SettingsPlace _settingsPlace)
+                                SettingsStorage::SettingsPlace _settingsPlace)
 {
+    if (d->isReadOnly) {
+        return;
+    }
+
     //
     // Кэшируем значение
     //
@@ -498,10 +1041,10 @@ void SettingsStorage::setValues(const QString& _valuesGroup, const QVariantMap& 
     else {
         Q_ASSERT_X(0, Q_FUNC_INFO, "Database settings can't save group of settings");
     }
-
 }
 
-QVariant SettingsStorage::value(const QString& _key, SettingsStorage::SettingsPlace _settingsPlace, const QVariant& _defaultValue) const
+QVariant SettingsStorage::value(const QString& _key, SettingsStorage::SettingsPlace _settingsPlace,
+                                const QVariant& _defaultValue) const
 {
     //
     // Пробуем получить значение из кэша
@@ -550,7 +1093,8 @@ QVariant SettingsStorage::value(const QString& _key, SettingsStorage::SettingsPl
     return d->defaultValues.value(_key);
 }
 
-QVariantMap SettingsStorage::values(const QString& _valuesGroup, SettingsStorage::SettingsPlace _settingsPlace)
+QVariantMap SettingsStorage::values(const QString& _valuesGroup,
+                                    SettingsStorage::SettingsPlace _settingsPlace)
 {
     //
     // Пробуем получить значение из кэша
@@ -580,7 +1124,7 @@ QVariantMap SettingsStorage::values(const QString& _valuesGroup, SettingsStorage
         // Получим все значения
         //
         for (const QString& key : keys) {
-             values.insert(QByteArray::fromHex(key.toUtf8()), d->appSettings.value(key));
+            values.insert(QByteArray::fromHex(key.toUtf8()), d->appSettings.value(key));
         }
 
         //
@@ -603,22 +1147,18 @@ QVariantMap SettingsStorage::values(const QString& _valuesGroup, SettingsStorage
     return values;
 }
 
-QString SettingsStorage::userName() const
+QString SettingsStorage::accountName() const
 {
-    //
-    // TODO: получать имя пользователя если он авторизован
-    //
-
-    return value(kSystemUsernameKey, SettingsPlace::Application).toString();
+    auto name = value(kAccountUserNameKey, SettingsPlace::Application).toString();
+    if (name.isEmpty()) {
+        name = value(kSystemUsernameKey, SettingsPlace::Application).toString();
+    }
+    return name;
 }
 
-QString SettingsStorage::userEmail() const
+QString SettingsStorage::accountEmail() const
 {
-    //
-    // TODO
-    //
-
-    return {};
+    return value(kAccountEmailKey, SettingsPlace::Application).toString();
 }
 
 QString SettingsStorage::documentFolderPath(const QString& _key) const
@@ -639,6 +1179,20 @@ QString SettingsStorage::documentFilePath(const QString& _key, const QString& _f
 void SettingsStorage::setDocumentFolderPath(const QString& _key, const QString& _filePath)
 {
     setValue(_key, QFileInfo(_filePath).absoluteDir().absolutePath(), SettingsPlace::Application);
+}
+
+void SettingsStorage::resetToDefaults()
+{
+    //
+    // Запрещаем писать настройки до перезагрузки приложения
+    //
+    d->isReadOnly = true;
+
+    //
+    // Стираем всё, что было изменено
+    //
+    d->appSettings.clear();
+    d->appSettings.sync();
 }
 
 SettingsStorage::SettingsStorage()

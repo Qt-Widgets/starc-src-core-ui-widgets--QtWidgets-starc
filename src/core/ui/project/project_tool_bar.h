@@ -3,8 +3,7 @@
 #include <ui/widgets/app_bar/app_bar.h>
 
 
-namespace Ui
-{
+namespace Ui {
 
 /**
  * @brief Панель инструментов проекта
@@ -23,12 +22,14 @@ public:
     /**
      * @brief Добавить представление
      */
-    void addView(const QString& _mimeType, const QString& _icon, const QString& _tooltip, bool _isActive = false);
+    void addView(const QString& _mimeType, const QString& _icon, const QString& _tooltip,
+                 bool _isActive = false);
 
     /**
-     * @brief Получить майм-тип текущего представления
+     * @brief Майм-тип текущего представления
      */
     QString currentViewMimeType() const;
+    void setCurrentViewMimeType(const QString& _mimeType);
 
 signals:
     /**

@@ -1,21 +1,20 @@
 #pragma once
 
+#include <QScopedPointer>
+#include <QtContainerFwd>
+
 #include <corelib_global.h>
 
 class QByteArray;
 class QUuid;
 
-template <typename T>
-class QVector;
-
 namespace Domain {
-    class DocumentObject;
-    enum class DocumentObjectType;
-}
+class DocumentObject;
+enum class DocumentObjectType;
+} // namespace Domain
 
 
-namespace DataStorageLayer
-{
+namespace DataStorageLayer {
 
 /**
  * @brief Хранилище документов
@@ -23,6 +22,8 @@ namespace DataStorageLayer
 class CORE_LIBRARY_EXPORT DocumentStorage
 {
 public:
+    ~DocumentStorage();
+
     /**
      * @brief Получить документ по uuid'у
      */
@@ -42,12 +43,18 @@ public:
     /**
      * @brief Сохранить документ
      */
-    Domain::DocumentObject* storeDocument(const QUuid& _uuid, Domain::DocumentObjectType _type);
+    Domain::DocumentObject* createDocument(const QUuid& _uuid, Domain::DocumentObjectType _type);
+
+    /**
+     * @brief Изменить гуид документа
+     */
+    void updateDocumentUuid(const QUuid& _old, const QUuid& _new);
 
     /**
      * @brief Обновить документ
      */
-    void updateDocument(Domain::DocumentObject* _document);
+    void saveDocument(Domain::DocumentObject* _document);
+    void saveDocument(const QUuid& _documentUuid);
 
     /**
      * @brief Удалить документ
@@ -60,8 +67,11 @@ public:
     void clear();
 
 private:
-    DocumentStorage() = default;
+    DocumentStorage();
     friend class StorageFacade;
+
+    class Implementation;
+    QScopedPointer<Implementation> d;
 };
 
 } // namespace DataStorageLayer

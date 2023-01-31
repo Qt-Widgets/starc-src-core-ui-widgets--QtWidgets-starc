@@ -3,12 +3,11 @@
 #include "abstract_mapper.h"
 
 namespace Domain {
-    class DocumentChangeObject;
+class DocumentChangeObject;
 }
 
 
-namespace DataMappingLayer
-{
+namespace DataMappingLayer {
 
 /**
  * @brief Отображатель данных изменений документов из БД в объекты
@@ -19,6 +18,9 @@ public:
     Domain::DocumentChangeObject* find(const Domain::Identifier& _id);
     Domain::DocumentChangeObject* find(const QUuid& _uuid);
     Domain::DocumentChangeObject* find(const QUuid& _documentUuid, int _changeIndex);
+    QVector<Domain::DocumentChangeObject*> findAllUnsynced(const QUuid& _documentUuid);
+
+    QVector<QUuid> unsyncedDocuments();
 
     void insert(Domain::DocumentChangeObject* _object);
     bool update(Domain::DocumentChangeObject* _object);
@@ -28,9 +30,12 @@ protected:
     QString findStatement(const Domain::Identifier& _id) const override;
     QString findAllStatement() const override;
     QString findLastOneStatement() const override;
-    QString insertStatement(Domain::DomainObject* _object, QVariantList& _insertValues) const override;
-    QString updateStatement(Domain::DomainObject* _object, QVariantList& _updateValues) const override;
-    QString deleteStatement(Domain::DomainObject* _object, QVariantList& _deleteValues) const override;
+    QString insertStatement(Domain::DomainObject* _object,
+                            QVariantList& _insertValues) const override;
+    QString updateStatement(Domain::DomainObject* _object,
+                            QVariantList& _updateValues) const override;
+    QString deleteStatement(Domain::DomainObject* _object,
+                            QVariantList& _deleteValues) const override;
 
 protected:
     Domain::DomainObject* doLoad(const Domain::Identifier& _id, const QSqlRecord& _record) override;
@@ -42,4 +47,3 @@ private:
 };
 
 } // namespace DataMappingLayer
-

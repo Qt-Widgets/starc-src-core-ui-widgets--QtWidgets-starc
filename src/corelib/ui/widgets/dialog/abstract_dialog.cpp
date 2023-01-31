@@ -1,16 +1,15 @@
 #include "abstract_dialog.h"
 
-#include "dialog_content.h"
-
 #include <ui/design_system/design_system.h>
-
 #include <ui/widgets/button/button.h>
+#include <ui/widgets/icon_button/icon_button.h>
 #include <ui/widgets/label/label.h>
+#include <ui/widgets/resizable_widget/resizable_widget.h>
 
 #include <QApplication>
 #include <QGridLayout>
-#include <QPainter>
 #include <QPaintEvent>
+#include <QPainter>
 #include <QTimer>
 #include <QVariantAnimation>
 
@@ -19,6 +18,11 @@ class AbstractDialog::Implementation
 {
 public:
     explicit Implementation(QWidget* _parent);
+
+    /**
+     * @brief Настроить таймер мониторинга активности приложения, если ещё не настроен
+     */
+    void initApplicationActivityChangingTimer();
 
     /**
      * @brief Анимировать отображение
@@ -31,9 +35,15 @@ public:
     void animateHide(const QPoint& _pos);
 
 
+    static QTimer sApplicationActivityChangingTimer;
+
     QVBoxLayout* layout = nullptr;
-    DialogContent* content = nullptr;
+    ResizableWidget* content = nullptr;
+    bool isContentMaximumWidthChanged = false;
+    bool isContentMinimumWidthChanged = false;
     H6Label* title = nullptr;
+    IconButton* titleIcon = nullptr;
+    QHBoxLayout* titleLayout = nullptr;
     QGridLayout* contentsLayout = nullptr;
     Button* acceptButton = nullptr;
     Button* rejectButton = nullptr;
@@ -44,22 +54,53 @@ public:
 };
 
 AbstractDialog::Implementation::Implementation(QWidget* _parent)
-    : content(new DialogContent(_parent)),
-      title(new H6Label(_parent)),
-      contentsLayout(new QGridLayout)
+    : content(new ResizableWidget(_parent))
+    , title(new H6Label(_parent))
+    , titleIcon(new IconButton(_parent))
+    , titleLayout(new QHBoxLayout)
+    , contentsLayout(new QGridLayout)
 {
     title->hide();
+    titleIcon->hide();
+    titleIcon->setFocusPolicy(Qt::NoFocus);
+
+    titleLayout->setContentsMargins({});
+    titleLayout->setSpacing(0);
+    titleLayout->addWidget(title, 1);
+    titleLayout->addWidget(titleIcon);
 
     layout = new QVBoxLayout(content);
     layout->setContentsMargins({});
     layout->setSpacing(0);
-    layout->addWidget(title);
+    layout->addLayout(titleLayout);
     layout->addLayout(contentsLayout);
+
+    content->setResizingActive(true);
 
     opacityAnimation.setDuration(220);
     opacityAnimation.setEasingCurve(QEasingCurve::OutQuad);
     contentPosAnimation.setDuration(220);
     contentPosAnimation.setEasingCurve(QEasingCurve::OutQuad);
+
+    initApplicationActivityChangingTimer();
+}
+
+void AbstractDialog::Implementation::initApplicationActivityChangingTimer()
+{
+    const int applicationActivityChangingTimerInterval = 1000;
+    if (sApplicationActivityChangingTimer.interval() == applicationActivityChangingTimerInterval
+        && sApplicationActivityChangingTimer.isSingleShot()) {
+        return;
+    }
+
+    sApplicationActivityChangingTimer.setInterval(applicationActivityChangingTimerInterval);
+    sApplicationActivityChangingTimer.setSingleShot(true);
+    connect(qApp, &QApplication::applicationStateChanged, &sApplicationActivityChangingTimer,
+            [](Qt::ApplicationState _state) {
+                if (_state == Qt::ApplicationActive) {
+                    sApplicationActivityChangingTimer.start();
+                }
+            });
 }
 
 void AbstractDialog::Implementation::animateShow(const QPoint& _pos)
@@ -89,13 +130,15 @@ void AbstractDialog::Implementation::animateHide(const QPoint& _pos)
     opacityAnimation.start();
 }
 
+QTimer AbstractDialog::Implementation::sApplicationActivityChangingTimer;
+
 
 // ****
 
 
 AbstractDialog::AbstractDialog(QWidget* _parent)
-    : Widget(_parent),
-      d(new Implementation(this))
+    : Widget(_parent)
+    , d(new Implementation(this))
 {
     Q_ASSERT(_parent);
 
@@ -116,8 +159,6 @@ AbstractDialog::AbstractDialog(QWidget* _parent)
         d->content->show();
         focusedWidgetAfterShow()->setFocus();
     });
-
-    designSystemChangeEvent(nullptr);
 }
 
 AbstractDialog::~AbstractDialog() = default;
@@ -129,46 +170,72 @@ void AbstractDialog::showDialog()
     }
 
     //
-    // Установим обрабочик событий, чтобы перехватывать потерю фокуса и возвращать его в диалог
+    // Ставим отображение диалога в очередь событий, т.к. имеет место кейс, когда диалог был создан,
+    // но ещё не был до конца инициилизрован (по событию PolishRequest, которое также кладётся в
+    // очередь в момент создания виджета)
     //
-    lastFocusableWidget()->installEventFilter(this);
+    QMetaObject::invokeMethod(
+        this,
+        [this] {
+            //
+            // Установим обрабочик событий, чтобы перехватывать потерю фокуса и возвращать его в
+            // диалог
+            //
+            focusedWidgetAfterShow()->installEventFilter(this);
+            lastFocusableWidget()->installEventFilter(this);
 
-    //
-    // Конфигурируем геометрию диалога
-    //
-    move(0, 0);
-    resize(parentWidget()->size());
+            //
+            // Конфигурируем геометрию диалога
+            //
+            move(0, 0);
+            resize(parentWidget()->size());
 
-    //
-    // Сохраняем изображение контента и прячем сам виджет
-    //
-    d->contentPixmap = d->content->grab();
-    d->content->hide();
+            //
+            // Сохраняем изображение контента и прячем сам виджет
+            //
+            d->contentPixmap = d->content->grab();
+            d->content->hide();
 
-    //
-    // Запускаем отображение
-    //
-    d->animateShow(d->content->pos());
-    setFocus();
-    show();
+            //
+            // Запускаем отображение
+            //
+            d->animateShow(d->content->pos());
+            setFocus();
+            show();
+        },
+        Qt::QueuedConnection);
 }
 
 void AbstractDialog::hideDialog()
 {
+    focusedWidgetAfterShow()->removeEventFilter(this);
+    lastFocusableWidget()->removeEventFilter(this);
+
     d->contentPixmap = d->content->grab();
     d->content->hide();
     d->animateHide(d->content->pos());
+
     QTimer::singleShot(d->opacityAnimation.duration(), this, &AbstractDialog::hide);
 }
 
 void AbstractDialog::setContentMinimumWidth(int _width)
 {
     d->content->setMinimumWidth(_width);
+    d->isContentMinimumWidthChanged = true;
+    updateGeometry();
 }
 
 void AbstractDialog::setContentMaximumWidth(int _width)
 {
     d->content->setMaximumWidth(_width);
+    d->isContentMaximumWidthChanged = true;
+    updateGeometry();
+}
+
+void AbstractDialog::setContentFixedWidth(int _width)
+{
+    setContentMinimumWidth(_width);
+    setContentMaximumWidth(_width);
 }
 
 void AbstractDialog::setAcceptButton(Button* _button)
@@ -197,6 +264,11 @@ void AbstractDialog::setTitle(const QString& _title)
     designSystemChangeEvent(nullptr);
 }
 
+IconButton* AbstractDialog::titleIcon() const
+{
+    return d->titleIcon;
+}
+
 QGridLayout* AbstractDialog::contentsLayout() const
 {
     return d->contentsLayout;
@@ -204,15 +276,29 @@ QGridLayout* AbstractDialog::contentsLayout() const
 
 bool AbstractDialog::eventFilter(QObject* _watched, QEvent* _event)
 {
-    if (_event->type() == QEvent::Resize
-        && _watched == parentWidget()) {
+    if (_event->type() == QEvent::Resize && _watched == parentWidget()) {
         auto resizeEvent = static_cast<QResizeEvent*>(_event);
         resize(resizeEvent->size());
     } else if (_event->type() == QEvent::FocusOut
-               && _watched == lastFocusableWidget()
                && (QApplication::focusWidget() == nullptr
                    || !findChildren<QWidget*>().contains(QApplication::focusWidget()))) {
-        focusedWidgetAfterShow()->setFocus();
+        //
+        // Зацикливаем фокусировку, только если диалог находится на вершине родителя
+        // -2 берётся, т.к. выше диалога есть ещё виджет статуса соединения с сервером
+        //
+        const auto parentWidgetChildren = parentWidget()->children();
+        if (parentWidgetChildren.indexOf(this) == parentWidgetChildren.size() - 2) {
+            //
+            // Устанавливаем фокус отложенно, чтобы не впасть в рекурсивный цикл
+            //
+            if (_watched == lastFocusableWidget()) {
+                QMetaObject::invokeMethod(focusedWidgetAfterShow(), qOverload<>(&QWidget::setFocus),
+                                          Qt::QueuedConnection);
+            } else if (_watched == focusedWidgetAfterShow()) {
+                QMetaObject::invokeMethod(lastFocusableWidget(), qOverload<>(&QWidget::setFocus),
+                                          Qt::QueuedConnection);
+            }
+        }
     }
 
     return QWidget::eventFilter(_watched, _event);
@@ -222,14 +308,11 @@ bool AbstractDialog::event(QEvent* _event)
 {
     if (_event->type() == QEvent::KeyPress) {
         const auto keyEvent = static_cast<QKeyEvent*>(_event);
-        if (d->acceptButton != nullptr
-            && d->acceptButton->isEnabled()
-            && (keyEvent->key() == Qt::Key_Enter
-                || keyEvent->key() == Qt::Key_Return)) {
+        if (d->acceptButton != nullptr && d->acceptButton->isEnabled()
+            && (keyEvent->key() == Qt::Key_Enter || keyEvent->key() == Qt::Key_Return)) {
             d->acceptButton->click();
             return true;
-        } else if (d->rejectButton != nullptr
-                   && d->rejectButton->isEnabled()
+        } else if (d->rejectButton != nullptr && d->rejectButton->isEnabled()
                    && keyEvent->key() == Qt::Key_Escape) {
             d->rejectButton->click();
             return true;
@@ -257,15 +340,38 @@ void AbstractDialog::paintEvent(QPaintEvent* _event)
     }
 }
 
+void AbstractDialog::mousePressEvent(QMouseEvent* _event)
+{
+    //
+    // Если пользователь кликнул вне области контента диалога,
+    // и при этом окно не было активировано посредством клика в этой области,
+    // и есть кнопка отмены, то используем её
+    //
+    if (!d->title->rect().contains(d->title->mapFromGlobal(_event->globalPos()))
+        && !d->content->rect().contains(d->content->mapFromGlobal(_event->globalPos()))
+        && !d->sApplicationActivityChangingTimer.isActive() && d->rejectButton != nullptr
+        && d->rejectButton->isEnabled()) {
+        d->rejectButton->click();
+    }
+}
+
 void AbstractDialog::designSystemChangeEvent(DesignSystemChangeEvent* _event)
 {
-    Q_UNUSED(_event)
+    Widget::designSystemChangeEvent(_event);
 
-    d->content->setMinimumWidth(static_cast<int>(Ui::DesignSystem::dialog().minimumWidth()));
+    if (!d->isContentMinimumWidthChanged) {
+        d->content->setMinimumWidth(static_cast<int>(Ui::DesignSystem::dialog().minimumWidth()));
+    }
+    if (!d->isContentMaximumWidthChanged) {
+        d->content->setMaximumWidth(static_cast<int>(Ui::DesignSystem::dialog().maximumWidth()));
+    }
     d->content->setBackgroundColor(Ui::DesignSystem::color().background());
-    d->title->setBackgroundColor(Ui::DesignSystem::color().background());
+    d->title->setBackgroundColor(Qt::transparent);
     d->title->setTextColor(Ui::DesignSystem::color().onBackground());
     d->title->setContentsMargins(Ui::DesignSystem::label().margins().toMargins());
+    d->titleIcon->setBackgroundColor(Ui::DesignSystem::color().background());
+    d->titleIcon->setTextColor(Ui::DesignSystem::color().onBackground());
+    d->titleLayout->setContentsMargins(0, 0, Ui::DesignSystem::layout().px24(), 0);
 }
 
 void AbstractDialog::show()

@@ -8,15 +8,14 @@
 #include <QKeyEvent>
 #include <QTextBlock>
 
-using BusinessLayer::ScreenplayParagraphType;
+using BusinessLayer::TextParagraphType;
 using Ui::ScreenplayTextEdit;
 
 
-namespace KeyProcessingLayer
-{
+namespace KeyProcessingLayer {
 
-ParentheticalHandler::ParentheticalHandler(ScreenplayTextEdit* _editor) :
-    StandardKeyHandler(_editor)
+ParentheticalHandler::ParentheticalHandler(ScreenplayTextEdit* _editor)
+    : StandardKeyHandler(_editor)
 {
 }
 
@@ -34,7 +33,8 @@ void ParentheticalHandler::handleEnter(QKeyEvent*)
     // ... текст после курсора
     QString cursorForwardText = currentBlock.text().mid(cursor.positionInBlock());
     // ... префикс и постфикс стиля
-    const auto style = BusinessLayer::TemplatesFacade::screenplayTemplate().blockStyle(ScreenplayParagraphType::Parenthetical);
+    const auto style
+        = editor()->screenplayTemplate().paragraphStyle(TextParagraphType::Parenthetical);
     QString stylePrefix = style.prefix();
     QString stylePostfix = style.postfix();
 
@@ -57,7 +57,7 @@ void ParentheticalHandler::handleEnter(QKeyEvent*)
             //
             // Удаляем всё, но оставляем стилем блока текущий
             //
-            editor()->addParagraph(ScreenplayParagraphType::Parenthetical);
+            editor()->addParagraph(TextParagraphType::Parenthetical);
         } else {
             //! Нет выделения
 
@@ -68,19 +68,17 @@ void ParentheticalHandler::handleEnter(QKeyEvent*)
                 //
                 // Ни чего не делаем
                 //
-                editor()->setCurrentParagraphType(changeForEnter(ScreenplayParagraphType::Parenthetical));
+                editor()->setCurrentParagraphType(changeForEnter(TextParagraphType::Parenthetical));
             } else {
                 //! Текст не пуст
 
-                if (cursorBackwardText.isEmpty()
-                    || cursorBackwardText == stylePrefix) {
+                if (cursorBackwardText.isEmpty() || cursorBackwardText == stylePrefix) {
                     //! В начале блока
 
                     //
                     // Ни чего не делаем
                     //
-                } else if (cursorForwardText.isEmpty()
-                           || cursorForwardText == stylePostfix) {
+                } else if (cursorForwardText.isEmpty() || cursorForwardText == stylePostfix) {
                     //! В конце блока
 
                     //
@@ -88,7 +86,7 @@ void ParentheticalHandler::handleEnter(QKeyEvent*)
                     //
                     cursor.movePosition(QTextCursor::EndOfBlock);
                     editor()->setTextCursor(cursor);
-                    editor()->addParagraph(jumpForEnter(ScreenplayParagraphType::Parenthetical));
+                    editor()->addParagraph(jumpForEnter(TextParagraphType::Parenthetical));
                 } else {
                     //! Внутри блока
 
@@ -97,7 +95,8 @@ void ParentheticalHandler::handleEnter(QKeyEvent*)
                     //
                     cursor.movePosition(QTextCursor::EndOfBlock);
                     if (cursorForwardText.endsWith(stylePostfix)) {
-                        for (int deleteReplays = stylePostfix.length(); deleteReplays > 0; --deleteReplays) {
+                        for (int deleteReplays = stylePostfix.length(); deleteReplays > 0;
+                             --deleteReplays) {
                             cursor.deletePreviousChar();
                         }
                     }
@@ -107,7 +106,7 @@ void ParentheticalHandler::handleEnter(QKeyEvent*)
                     // Перейдём к блоку реплики
                     //
                     editor()->setTextCursor(cursor);
-                    editor()->addParagraph(ScreenplayParagraphType::Dialogue);
+                    editor()->addParagraph(TextParagraphType::Dialogue);
                 }
             }
         }
@@ -128,7 +127,8 @@ void ParentheticalHandler::handleTab(QKeyEvent*)
     // ... текст после курсора
     QString cursorForwardText = currentBlock.text().mid(cursor.positionInBlock());
     // ... префикс и постфикс стиля
-    const auto style = BusinessLayer::TemplatesFacade::screenplayTemplate().blockStyle(ScreenplayParagraphType::Parenthetical);
+    const auto style
+        = editor()->screenplayTemplate().paragraphStyle(TextParagraphType::Parenthetical);
     QString stylePrefix = style.prefix();
     QString stylePostfix = style.postfix();
 
@@ -161,19 +161,17 @@ void ParentheticalHandler::handleTab(QKeyEvent*)
                 //
                 // Меняем стиль на реплику
                 //
-                editor()->setCurrentParagraphType(changeForTab(ScreenplayParagraphType::Parenthetical));
+                editor()->setCurrentParagraphType(changeForTab(TextParagraphType::Parenthetical));
             } else {
                 //! Текст не пуст
 
-                if (cursorBackwardText.isEmpty()
-                    || cursorBackwardText == stylePrefix) {
+                if (cursorBackwardText.isEmpty() || cursorBackwardText == stylePrefix) {
                     //! В начале блока
 
                     //
                     // Ни чего не делаем
                     //
-                } else if (cursorForwardText.isEmpty()
-                           || cursorForwardText == stylePostfix) {
+                } else if (cursorForwardText.isEmpty() || cursorForwardText == stylePostfix) {
                     //! В конце блока
 
                     //
@@ -181,7 +179,7 @@ void ParentheticalHandler::handleTab(QKeyEvent*)
                     //
                     cursor.movePosition(QTextCursor::EndOfBlock);
                     editor()->setTextCursor(cursor);
-                    editor()->addParagraph(jumpForTab(ScreenplayParagraphType::Parenthetical));
+                    editor()->addParagraph(jumpForTab(TextParagraphType::Parenthetical));
                 } else {
                     //! Внутри блока
 
@@ -211,8 +209,7 @@ void ParentheticalHandler::handleOther(QKeyEvent* _event)
     //
     // Была нажата открывающая скобка
     //
-    if (_event != 0
-        && _event->text() == "(") {
+    if (_event != 0 && _event->text() == "(") {
         //
         // Удаляем введённую скобку
         //
@@ -225,8 +222,7 @@ void ParentheticalHandler::handleOther(QKeyEvent* _event)
     //
     // Была нажата закрывающая скобка
     //
-    else if (_event != 0
-             && _event->text() == ")") {
+    else if (_event != 0 && _event->text() == ")") {
         //
         // Во всех случаях удаляем введённую скобку
         //
@@ -241,7 +237,7 @@ void ParentheticalHandler::handleOther(QKeyEvent* _event)
             //
             cursor.movePosition(QTextCursor::EndOfBlock);
             editor()->setTextCursor(cursor);
-            editor()->addParagraph(ScreenplayParagraphType::Dialogue);
+            editor()->addParagraph(TextParagraphType::Dialogue);
         }
     }
     //

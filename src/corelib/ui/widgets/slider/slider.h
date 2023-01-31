@@ -15,14 +15,32 @@ public:
     ~Slider() override;
 
     /**
+     * @brief Задать цвет активной области слайдера (слева от ползунка)
+     */
+    void setActiveColor(const QColor& _color);
+
+    /**
      * @brief Задать максимальное значение слайдера
      */
+    int maximumValue() const;
     void setMaximumValue(int _value);
 
     /**
      * @brief Задать текущее значение слайдера
      */
+    int value() const;
     void setValue(int _value);
+
+    /**
+     * @brief Позицию по-умолчанию слайдера
+     */
+    int defaultValue() const;
+    void setDefaultValue(int _value);
+
+    /**
+     * @brief Отменить использование позиции по-умолчанию
+     */
+    void resetDefaultValue();
 
     /**
      * @brief Переопределяем для корректного подсчёта размера в компоновщиках
@@ -55,6 +73,11 @@ protected:
      * @brief Переопределяем для определения момента отпускания мыши и скрытия области клика
      */
     void mouseReleaseEvent(QMouseEvent* _event) override;
+
+    /**
+     * @brief Переопределяем, чтобы нажатие стрелок лево и право изменяло значение
+     */
+    void keyPressEvent(QKeyEvent* _event) override;
 
     /**
      * @brief Переопределяем для обработки события смены дизайн-системы

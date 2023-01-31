@@ -1,24 +1,26 @@
 #pragma once
 
-#include <ui/widgets/text_edit/base/base_text_edit.h>
+#include <ui/modules/script_text_edit/script_text_edit.h>
 
 namespace BusinessLayer {
-    class CharactersModel;
-    class LocationsModel;
-    class ScreenplayDictionariesModel;
-    class ScreenplayTextCursor;
-    class ScreenplayTextModel;
-    enum class ScreenplayParagraphType;
+class ScreenplayDictionariesModel;
+class TextCursor;
+class ScreenplayTextModel;
+class ScreenplayTemplate;
+enum class TextParagraphType;
+} // namespace BusinessLayer
+
+namespace Domain {
+struct CursorInfo;
 }
 
 
-namespace Ui
-{
+namespace Ui {
 
 /**
  * @brief Текстовый редактор сценария
  */
-class ScreenplayTextEdit : public BaseTextEdit
+class ScreenplayTextEdit : public ScriptTextEdit
 {
     Q_OBJECT
 
@@ -37,6 +39,11 @@ public:
     void setShowDialogueNumber(bool _show);
 
     /**
+     * @brief Настроить необходимость корректировок
+     */
+    void setCorrectionOptions(bool _needToCorrectCharactersNames, bool _needToCorrectPageBreaks);
+
+    /**
      * @brief Задать модель текста сценария
      */
     void initWithModel(BusinessLayer::ScreenplayTextModel* _model);
@@ -48,6 +55,11 @@ public:
     void reinit();
 
     /**
+     * @brief Текущий используемый шаблон оформления
+     */
+    const BusinessLayer::ScreenplayTemplate& screenplayTemplate() const;
+
+    /**
      * @brief Получить модель справочников сценария
      */
     BusinessLayer::ScreenplayDictionariesModel* dictionaries() const;
@@ -55,12 +67,22 @@ public:
     /**
      * @brief Получить модель персонажей
      */
-    BusinessLayer::CharactersModel* characters() const;
+    QAbstractItemModel* characters() const;
+
+    /**
+     * @brief Создать персонажа с заданным именем
+     */
+    void createCharacter(const QString& _name);
 
     /**
      * @brief Получить модель локаций
      */
-    BusinessLayer::LocationsModel* locations() const;
+    QAbstractItemModel* locations() const;
+
+    /**
+     * @brief Создать локацию с заданным именем
+     */
+    void createLocation(const QString& _name);
 
     /**
      * @brief Отменить последнее изменение
@@ -76,23 +98,18 @@ public:
      * @brief Вставить новый блок
      * @param Тип блока
      */
-    void addParagraph(BusinessLayer::ScreenplayParagraphType _type);
+    void addParagraph(BusinessLayer::TextParagraphType _type);
 
     /**
      * @brief Установить тип текущего блока
      * @param Тип блока
      */
-    void setCurrentParagraphType(BusinessLayer::ScreenplayParagraphType _type);
+    void setCurrentParagraphType(BusinessLayer::TextParagraphType _type);
 
     /**
      * @brief Получить тип блока в котором находится курсор
      */
-    BusinessLayer::ScreenplayParagraphType currentParagraphType() const;
-
-    /**
-     * @brief Своя реализация установки курсора
-     */
-    void setTextCursorReimpl(const QTextCursor& _cursor);
+    BusinessLayer::TextParagraphType currentParagraphType() const;
 
     /**
      * @brief Получить индекс элемента модели в текущей позиции курсора
@@ -112,13 +129,44 @@ public:
     /**
      * @brief Добавить редакторскую заметку для текущего выделения
      */
-    void addReviewMark(const QColor& _textColor, const QColor& _backgroundColor, const QString& _comment);
+    void addReviewMark(const QColor& _textColor, const QColor& _backgroundColor,
+                       const QString& _comment);
+
+    /**
+     * @brief Задать курсоры соавторов
+     */
+    void setCursors(const QVector<Domain::CursorInfo>& _cursors);
 
 signals:
     /**
      * @brief Изменён тип абзаца
      */
     void paragraphTypeChanged();
+
+    /**
+     * @brief Пользователь хочет добавить закладку
+     */
+    void addBookmarkRequested();
+
+    /**
+     * @brief Пользователь хочет изменить закладку
+     */
+    void editBookmarkRequested();
+
+    /**
+     * @brief Пользователь хочет удалить закладку
+     */
+    void removeBookmarkRequested();
+
+    /**
+     * @brief Пользователь хочет показать/скрыть список закладок
+     */
+    void showBookmarksRequested();
+
+    /**
+     * @brief Запрос на генерацию текста
+     */
+    void generateTextRequested(const QString& _text);
 
 protected:
     /**
@@ -129,10 +177,7 @@ protected:
     /**
      * @brief Обрабатываем специфичные ситуации для редактора сценария
      */
-    /** @{ */
     bool keyPressEventReimpl(QKeyEvent* _event) override;
-    bool updateEnteredText(const QString& _eventText) override;
-    /** @} */
 
     /**
      * @brief Реализуем отрисовку дополнительных элементов

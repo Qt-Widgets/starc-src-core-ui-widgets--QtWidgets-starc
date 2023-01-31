@@ -1,20 +1,20 @@
 #include "screenplay_text_structure_model.h"
 
 #include <business_layer/model/screenplay/text/screenplay_text_model.h>
-#include <business_layer/model/screenplay/text/screenplay_text_model_item.h>
 #include <business_layer/model/screenplay/text/screenplay_text_model_text_item.h>
+#include <business_layer/model/text/text_model_group_item.h>
 #include <business_layer/templates/screenplay_template.h>
 
 #include <QApplication>
 
 
-namespace BusinessLayer
-{
+namespace BusinessLayer {
 
 class ScreenplayTextStructureModel::Implementation
 {
 public:
     ScreenplayTextModel* screenplayModel = nullptr;
+    bool showBeats = true;
 };
 
 
@@ -22,36 +22,31 @@ public:
 
 
 ScreenplayTextStructureModel::ScreenplayTextStructureModel(QObject* _parent)
-    : QSortFilterProxyModel(_parent),
-      d(new Implementation)
+    : QSortFilterProxyModel(_parent)
+    , d(new Implementation)
 {
 }
 
 ScreenplayTextStructureModel::~ScreenplayTextStructureModel() = default;
 
-void ScreenplayTextStructureModel::setSourceModel(QAbstractItemModel* _sourceModel)
+void ScreenplayTextStructureModel::showBeats(bool _show)
 {
-    if (d->screenplayModel) {
-        d->screenplayModel->disconnect(this);
+    if (d->showBeats == _show) {
+        return;
     }
 
-    d->screenplayModel = qobject_cast<ScreenplayTextModel*>(_sourceModel);
-    QSortFilterProxyModel::setSourceModel(_sourceModel);
-
-    if (d->screenplayModel != nullptr) {
-        //
-        // FIXME: Это сделано из-за того, что при перемещении элементов внутри модели сценария
-        //        в позицию 0, на вторую попытку происходит падение внутри QSortFilterModel,
-        //        видимо не успевает происходить какая-то внутренняя магия при синхронном удалении
-        //        и последующей вставки элементов в модели
-        //
-        connect(d->screenplayModel, &ScreenplayTextModel::rowsRemoved, this, [] {
-            QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
-        });
-    }
+    d->showBeats = _show;
+    invalidate();
 }
 
-bool ScreenplayTextStructureModel::filterAcceptsRow(int _sourceRow, const QModelIndex& _sourceParent) const
+void ScreenplayTextStructureModel::setSourceModel(QAbstractItemModel* _sourceModel)
+{
+    d->screenplayModel = qobject_cast<ScreenplayTextModel*>(_sourceModel);
+    QSortFilterProxyModel::setSourceModel(_sourceModel);
+}
+
+bool ScreenplayTextStructureModel::filterAcceptsRow(int _sourceRow,
+                                                    const QModelIndex& _sourceParent) const
 {
     if (d->screenplayModel == nullptr) {
         return false;
@@ -61,19 +56,28 @@ bool ScreenplayTextStructureModel::filterAcceptsRow(int _sourceRow, const QModel
     const auto item = d->screenplayModel->itemForIndex(itemIndex);
 
     //
-    // Показываем папки и сцены
+    // Показываем папки
     //
-    if (item->type() == ScreenplayTextModelItemType::Folder
-        || item->type() == ScreenplayTextModelItemType::Scene) {
+    if (item->type() == TextModelItemType::Folder) {
         return true;
+    }
+    //
+    // Показываем сцены и биты (если разрешены)
+    //
+    else if (item->type() == TextModelItemType::Group) {
+        auto groupItem = static_cast<TextModelGroupItem*>(item);
+        if (groupItem->groupType() == TextGroupType::Beat) {
+            return d->showBeats;
+        } else {
+            return true;
+        }
     }
     //
     // Из текста показываем только кадры, которые не являются корректировочными блоками
     //
-    if (item->type() == ScreenplayTextModelItemType::Text) {
+    else if (item->type() == TextModelItemType::Text) {
         const auto textItem = static_cast<ScreenplayTextModelTextItem*>(item);
-        return !textItem->isCorrection()
-                && textItem->paragraphType() == ScreenplayParagraphType::Shot;
+        return !textItem->isCorrection() && textItem->paragraphType() == TextParagraphType::Shot;
     }
     //
     // Остальное не показываем

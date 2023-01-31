@@ -15,19 +15,37 @@ public:
     ~Drawer() override;
 
     /**
-     * @brief Установить заголовок
+     * @brief Установить необходимость использования панели аккаунта
      */
-    void setTitle(const QString& _title);
+    void setAccountVisible(bool _use);
 
     /**
-     * @brief Установить подзаголовок
+     * @brief Параметры панели аккаунта
      */
-    void setSubtitle(const QString& _subtitle);
+    void setAvatar(const QPixmap& _avatar);
+    void setAccountName(const QString& _name);
+    void setAccountEmail(const QString& _email);
+
+    /**
+     * @brief Задать дополнительные действия аккаунта
+     */
+    void setAccountActions(const QVector<QAction*>& _actions);
+
+    /**
+     * @brief Настроить отображение красной точки у дополнительного действия
+     */
+    void setAccountActionBadgeVisible(QAction* _action, bool _visible);
 
     /**
      * @brief Определяем идеальный размер
      */
     QSize sizeHint() const override;
+
+signals:
+    /**
+     * @brief Пользователь кликнул на аккаунте
+     */
+    void accountPressed();
 
 protected:
     /**

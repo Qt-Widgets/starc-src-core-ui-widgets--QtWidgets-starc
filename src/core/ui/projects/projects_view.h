@@ -3,13 +3,12 @@
 #include <ui/widgets/stack_widget/stack_widget.h>
 
 namespace ManagementLayer {
-    class Project;
-    class ProjectsModel;
-}
+class Project;
+class ProjectsModel;
+} // namespace ManagementLayer
 
 
-namespace Ui
-{
+namespace Ui {
 
 /**
  * @brief Представление списка проектов
@@ -54,24 +53,9 @@ signals:
     void openProjectRequested(const ManagementLayer::Project& _project);
 
     /**
-     * @brief Пользователь хочет перенести проект в облако
+     * @brief Запрос на отображение контекстного меню проекта
      */
-    void moveProjectToCloudRequested(const ManagementLayer::Project& _project);
-
-    /**
-     * @brief Пользователь хочет скрыть проект
-     */
-    void hideProjectRequested(const ManagementLayer::Project& _project);
-
-    /**
-     * @brief Пользователь хочет изменить название проекта
-     */
-    void changeProjectNameRequested(const ManagementLayer::Project& _project);
-
-    /**
-     * @brief Пользователь хочет удалить проект
-     */
-    void removeProjectRequested(const ManagementLayer::Project& _project);
+    void projectContextMenuRequested(const ManagementLayer::Project& _project);
 
 protected:
     /**

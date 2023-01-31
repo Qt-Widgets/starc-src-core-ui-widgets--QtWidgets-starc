@@ -1,11 +1,13 @@
 #include "completer.h"
 
 #include <ui/design_system/design_system.h>
-#include <ui/widgets/tree/tree_view.h>
 #include <ui/widgets/tree/tree_delegate.h>
+#include <ui/widgets/tree/tree_view.h>
+#include <ui/widgets/widget/widget.h>
 
 #include <QElapsedTimer>
 #include <QEvent>
+#include <QScreen>
 #include <QTimer>
 #include <QVariantAnimation>
 
@@ -25,8 +27,8 @@ public:
      * @brief Цвета элеметов списка подстановки
      */
     /** @{ */
-    QColor backgroundColor = Qt::red;
-    QColor textColor = Qt::red;
+    QColor backgroundColor = kDefaultWidgetColor;
+    QColor textColor = kDefaultWidgetColor;
     /** @} */
 
     /**
@@ -49,12 +51,13 @@ public:
     /**
      * @brief Анимация отображения попапа
      */
+    QVariantAnimation popupPositionAnimation;
     QVariantAnimation popupHeightAnimation;
 };
 
 Completer::Implementation::Implementation(QWidget* _parent)
-    : popup(new TreeView(_parent)),
-      popupDelegate(new TreeDelegate(popup))
+    : popup(new TreeView(_parent))
+    , popupDelegate(new TreeDelegate(popup))
 {
     popup->setHeaderHidden(true);
     popup->setRootIsDecorated(false);
@@ -63,18 +66,18 @@ Completer::Implementation::Implementation(QWidget* _parent)
     popup->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     popup->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
+    popupPositionAnimation.setEasingCurve(QEasingCurve::OutQuint);
+    popupPositionAnimation.setDuration(240);
     popupHeightAnimation.setEasingCurve(QEasingCurve::OutQuint);
     popupHeightAnimation.setDuration(240);
-    popupHeightAnimation.setStartValue(0);
-    popupHeightAnimation.setEndValue(0);
+    popupHeightAnimation.setStartValue(1);
 
-    connect(&popupHeightAnimation, &QVariantAnimation::valueChanged, popup, [this] (const QVariant& _value) {
-        const auto height = _value.toInt();
-        popup->resize(popup->width(), height);
-    });
-    connect(&popupHeightAnimation, &QVariantAnimation::finished, &popupHeightAnimation, [this] {
-        popupHeightAnimation.setStartValue(popupHeightAnimation.endValue());
-    });
+    connect(&popupPositionAnimation, &QVariantAnimation::valueChanged, popup,
+            [this](const QVariant& _value) { popup->move(popup->x(), _value.toInt()); });
+    connect(&popupHeightAnimation, &QVariantAnimation::valueChanged, popup,
+            [this](const QVariant& _value) { popup->resize(popup->width(), _value.toInt()); });
+    connect(&popupHeightAnimation, &QVariantAnimation::finished, &popupHeightAnimation,
+            [this] { popupHeightAnimation.setStartValue(popupHeightAnimation.endValue()); });
 }
 
 void Completer::Implementation::reconfigurePopup()
@@ -86,7 +89,7 @@ void Completer::Implementation::reconfigurePopup()
     palette.setColor(QPalette::AlternateBase, alternateBaseColor);
     palette.setColor(QPalette::Text, textColor);
     palette.setColor(QPalette::Highlight, Ui::DesignSystem::tree().selectionColor());
-    palette.setColor(QPalette::HighlightedText, Ui::DesignSystem::color().secondary());
+    palette.setColor(QPalette::HighlightedText, Ui::DesignSystem::color().accent());
     popup->setPalette(palette);
     popup->setIndentation(static_cast<int>(Ui::DesignSystem::tree().indicatorWidth()));
 }
@@ -96,8 +99,8 @@ void Completer::Implementation::reconfigurePopup()
 
 
 Completer::Completer(QWidget* _parent)
-    : QCompleter(_parent),
-      d(new Implementation(_parent))
+    : QCompleter(_parent)
+    , d(new Implementation(_parent))
 {
     d->popup->installEventFilter(this);
 
@@ -143,30 +146,56 @@ void Completer::showCompleter(const QRect& _rect)
     // Отобразим
     //
     complete(_rect);
-    popup()->move(_rect.topLeft());
 
     //
-    // Анимируем размер попапа
-    // FIXME: разобраться с проблемами backing store в маке
-    // FIXME: в винде тоже не работает как хотелось бы, какие-то моргания
+    // Определим высоту попапа
     //
-#ifdef Q_OS_LINUX
     const int finalHeight = static_cast<int>(std::min(maxVisibleItems(), completionCount())
                                              * Ui::DesignSystem::treeOneLineItem().height());
-    if (d->popupHeightAnimation.state() == QVariantAnimation::Stopped) {
-        d->popup->resize(d->popup->width(), d->popupHeightAnimation.startValue().toInt());
-        d->popupHeightAnimation.setEndValue(finalHeight);
-        d->popupHeightAnimation.start();
-    } else {
-        d->popup->resize(d->popup->width(), d->popupHeightAnimation.currentValue().toInt());
-        if (d->popupHeightAnimation.endValue().toInt() != finalHeight) {
-            d->popupHeightAnimation.stop();
-            d->popupHeightAnimation.setStartValue(d->popupHeightAnimation.currentValue());
-            d->popupHeightAnimation.setEndValue(finalHeight);
-            d->popupHeightAnimation.start();
-        }
+    popup()->resize(_rect.width(), finalHeight);
+
+    //
+    // Прикидываем размещение попапа на экране
+    //
+    const auto screen = popup()->screen();
+    Q_ASSERT(screen);
+    const auto screenGeometry = screen->geometry();
+    auto position = _rect.topLeft();
+    //
+    // ... если попап не вмещается в нижнюю часть экрана
+    //
+    const auto parentWidget = qobject_cast<QWidget*>(parent());
+    Q_ASSERT(parentWidget);
+    if (const auto positionGlobal = parentWidget->mapToGlobal(position);
+        positionGlobal.y() + finalHeight > screenGeometry.bottom()) {
+        position = positionGlobal;
+        position.setY(std::max(position.y() - finalHeight - _rect.height(), screenGeometry.top()));
+        position = parentWidget->mapFromGlobal(position);
     }
-#endif
+    popup()->move(position);
+
+    //        //
+    //        // Анимируем размер попапа
+    //        // FIXME: разобраться с проблемами backing store в маке
+    //        // FIXME: в винде тоже не работает как хотелось бы, какие-то моргания
+    //        //
+    //    #ifdef Q_OS_LINUX
+    //        if (d->popupHeightAnimation.state() == QVariantAnimation::Stopped) {
+    //            d->popupHeightAnimation.setEndValue(static_cast<int>(finalHeight));
+    //            d->popup->resize(d->popup->width(), d->popupHeightAnimation.startValue().toInt());
+    //            d->popupHeightAnimation.setEndValue(finalHeight);
+    //            d->popupHeightAnimation.start();
+    //        } else {
+    //            d->popup->resize(d->popup->width(),
+    //            d->popupHeightAnimation.currentValue().toInt()); if
+    //            (d->popupHeightAnimation.endValue().toInt() != finalHeight) {
+    //                d->popupHeightAnimation.stop();
+    //                d->popupHeightAnimation.setStartValue(d->popupHeightAnimation.currentValue());
+    //                d->popupHeightAnimation.setEndValue(finalHeight);
+    //                d->popupHeightAnimation.start();
+    //            }
+    //        }
+    //    #endif
 }
 
 void Completer::closeCompleter()

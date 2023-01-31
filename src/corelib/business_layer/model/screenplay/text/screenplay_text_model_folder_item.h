@@ -1,66 +1,73 @@
 #pragma once
 
-#include "screenplay_text_model_item.h"
+#include <business_layer/model/text/text_model_folder_item.h>
 
-#include <Qt>
+#include <QPair>
+#include <QRectF>
 
 #include <chrono>
 
-class QXmlStreamReader;
 
+namespace BusinessLayer {
 
-namespace BusinessLayer
-{
+class ScreenplayTextModel;
 
 /**
  * @brief Класс элементов папок модели сценария
  */
-class CORE_LIBRARY_EXPORT ScreenplayTextModelFolderItem : public ScreenplayTextModelItem
+class CORE_LIBRARY_EXPORT ScreenplayTextModelFolderItem : public TextModelFolderItem
 {
 public:
     /**
      * @brief Роли данных из модели
      */
-    enum DataRole {
-        FolderNameRole = Qt::UserRole + 1,
-        FolderDurationRole
+    enum {
+        FolderDurationRole = TextModelFolderItem::FolderUserRole + 1,
     };
 
 public:
-    ScreenplayTextModelFolderItem();
-    explicit ScreenplayTextModelFolderItem(QXmlStreamReader& _contentReader);
+    explicit ScreenplayTextModelFolderItem(const ScreenplayTextModel* _model, TextFolderType _type);
     ~ScreenplayTextModelFolderItem() override;
 
     /**
-     * @brief Длительность сцены
+     * @brief Параметры отображения карточки
+     */
+    struct CardInfo {
+        QRectF geometry;
+        bool isOpened = false;
+    };
+    const CardInfo& cardInfo() const;
+    void setCardInfo(const CardInfo& _info);
+
+    /**
+     * @brief Количество слов
+     */
+    int wordsCount() const;
+
+    /**
+     * @brief Количество символов
+     */
+    QPair<int, int> charactersCount() const;
+
+    /**
+     * @brief Длительность папки
      */
     std::chrono::milliseconds duration() const;
 
     /**
-     * @brief Определяем интерфейс получения данных сцены
+     * @brief Определяем интерфейс получения данных папки
      */
     QVariant data(int _role) const override;
 
     /**
-     * @brief Определяем интерфейс для получения XML блока
+     * @brief Подходит ли элемент под условия заданного фильтра
      */
-    QByteArray toXml() const override;
-    QByteArray toXml(ScreenplayTextModelItem* _from, int _fromPosition, ScreenplayTextModelItem* _to, int _toPosition, bool _clearUuid) const;
-    QByteArray xmlHeader(bool _clearUuid = false) const;
-
-    /**
-     * @brief Скопировать контент с заданного элемента
-     */
-    void copyFrom(ScreenplayTextModelItem* _item) override;
-
-    /**
-     * @brief Проверить равен ли текущий элемент заданному
-     */
-    bool isEqual(ScreenplayTextModelItem* _item) const override;
+    bool isFilterAccepted(const QString& _text, bool _isCaseSensitive,
+                          int _filterType) const override;
 
 protected:
     /**
-     * @brief Обновляем текст сцены при изменении кого-то из детей
+     * @brief Обновляем текст папки при изменении кого-то из детей
      */
     void handleChange() override;
 

@@ -2,23 +2,21 @@
 
 #include <business_layer/templates/screenplay_template.h>
 #include <business_layer/templates/templates_facade.h>
-
 #include <utils/helpers/text_helper.h>
 
+#include <QRegularExpression>
 #include <QString>
 #include <QStringList>
-#include <QRegularExpression>
 
 
-namespace BusinessLayer
+namespace BusinessLayer {
+
+ScreenplayCharacterParser::Section ScreenplayCharacterParser::section(const QString& _text)
 {
-
-CharacterParser::Section CharacterParser::section(const QString& _text)
-{
-    CharacterParser::Section section = SectionUndefined;
+    ScreenplayCharacterParser::Section section = SectionUndefined;
 
     if (_text.split("(").count() == 2) {
-        section = SectionState;
+        section = SectionExtension;
     } else {
         section = SectionName;
     }
@@ -26,7 +24,7 @@ CharacterParser::Section CharacterParser::section(const QString& _text)
     return section;
 }
 
-QString CharacterParser::name(const QString& _text)
+QString ScreenplayCharacterParser::name(const QString& _text)
 {
     //
     // В блоке персонажа так же могут быть указания, что он говорит за кадром и т.п.
@@ -37,7 +35,7 @@ QString CharacterParser::name(const QString& _text)
     return TextHelper::smartToUpper(name.remove(QRegularExpression("[(](.*)")).simplified());
 }
 
-QString CharacterParser::extension(const QString& _text)
+QString ScreenplayCharacterParser::extension(const QString& _text)
 {
     //
     // В блоке персонажа так же могут быть указания, что он говорит за кадром и т.п.
@@ -51,14 +49,14 @@ QString CharacterParser::extension(const QString& _text)
         state = match.captured(0);
         state = state.remove("(").remove(")");
     }
-    return TextHelper::smartToUpper(state);
+    return TextHelper::smartToUpper(state).simplified();
 }
 
 // ****
 
-SceneHeadingParser::Section SceneHeadingParser::section(const QString& _text)
+ScreenplaySceneHeadingParser::Section ScreenplaySceneHeadingParser::section(const QString& _text)
 {
-    SceneHeadingParser::Section section = SectionUndefined;
+    ScreenplaySceneHeadingParser::Section section = SectionUndefined;
 
     if (_text.split(", ").count() == 2) {
         section = SectionStoryDay;
@@ -76,18 +74,17 @@ SceneHeadingParser::Section SceneHeadingParser::section(const QString& _text)
     return section;
 }
 
-QString SceneHeadingParser::sceneIntro(const QString& _text)
+QString ScreenplaySceneHeadingParser::sceneIntro(const QString& _text)
 {
-    QString placeName;
-
-    if (_text.split(". ").count() > 0) {
-        placeName = _text.split(". ").value(0);
+    if (!_text.contains(". ")) {
+        return TextHelper::smartToUpper(_text);
     }
 
-    return TextHelper::smartToUpper(placeName);
+    const auto placeName = _text.split(". ").constFirst();
+    return TextHelper::smartToUpper(placeName).simplified() + ".";
 }
 
-QString SceneHeadingParser::location(const QString& _text, bool _force)
+QString ScreenplaySceneHeadingParser::location(const QString& _text, bool _force)
 {
     QString locationName;
 
@@ -100,10 +97,10 @@ QString SceneHeadingParser::location(const QString& _text, bool _force)
         }
     }
 
-    return TextHelper::smartToUpper(locationName);
+    return TextHelper::smartToUpper(locationName).simplified();
 }
 
-QString SceneHeadingParser::storyDay(const QString& _text)
+QString ScreenplaySceneHeadingParser::storyDay(const QString& _text)
 {
     QString scenarioDayName;
 
@@ -111,10 +108,10 @@ QString SceneHeadingParser::storyDay(const QString& _text)
         scenarioDayName = _text.split(", ").last();
     }
 
-    return TextHelper::smartToUpper(scenarioDayName);
+    return TextHelper::smartToUpper(scenarioDayName).simplified();
 }
 
-QString SceneHeadingParser::sceneTime(const QString& _text)
+QString ScreenplaySceneHeadingParser::sceneTime(const QString& _text)
 {
     QString timeName;
 
@@ -123,37 +120,21 @@ QString SceneHeadingParser::sceneTime(const QString& _text)
         timeName = timeName.simplified();
     }
 
-    return TextHelper::smartToUpper(timeName);
+    return TextHelper::smartToUpper(timeName).simplified();
 }
 
 // ****
 
-QStringList SceneCharactersParser::characters(const QString& _text)
+QStringList ScreenplaySceneCharactersParser::characters(const QString& _text)
 {
-    QString characters = _text.simplified();
-
-    //
-    // Удалим потенциальные приставку и окончание
-    //
-    const auto style = TemplatesFacade::screenplayTemplate().blockStyle(ScreenplayParagraphType::SceneCharacters);
-    QString stylePrefix = style.prefix();
-    if (!stylePrefix.isEmpty()
-        && characters.startsWith(stylePrefix)) {
-        characters.remove(QRegularExpression(QString("^[%1]").arg(stylePrefix)));
-    }
-    QString stylePostfix = style.postfix();
-    if (!stylePostfix.isEmpty()
-        && characters.endsWith(stylePostfix)) {
-        characters.remove(QRegularExpression(QString("[%1]$").arg(stylePostfix)));
-    }
-
-    QStringList charactersList = characters.split(",", QString::SkipEmptyParts);
+    const auto characters = _text.simplified();
+    auto charactersList = characters.split(",", Qt::SkipEmptyParts);
 
     //
     // Убираем символы пробелов
     //
     for (int index = 0; index < charactersList.size(); ++index) {
-        charactersList[index] = TextHelper::smartToUpper(charactersList[index].simplified());
+        charactersList[index] = ScreenplayCharacterParser::name(charactersList[index].simplified());
     }
 
     return charactersList;

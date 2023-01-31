@@ -2,24 +2,32 @@
 
 #include "text_model_item.h"
 
-#include <optional>
-
+#include <QColor>
+#include <QString>
 #include <QTextLayout>
+
+#include <optional>
 
 class QXmlStreamReader;
 
 
-namespace BusinessLayer
-{
+namespace BusinessLayer {
 
 enum class TextParagraphType;
 
 /**
- * @brief Элемент модели текстового документа
+ * @brief Класс элемента текста модели текста
  */
 class CORE_LIBRARY_EXPORT TextModelTextItem : public TextModelItem
 {
 public:
+    /**
+     * @brief Роли данных из модели
+     */
+    enum {
+        TextNumberRole = Qt::UserRole + 1,
+    };
+
     struct CORE_LIBRARY_EXPORT TextPart {
         int from = 0;
         int length = 0;
@@ -29,6 +37,11 @@ public:
         bool isBold = false;
         bool isItalic = false;
         bool isUnderline = false;
+        bool isStrikethrough = false;
+        struct {
+            QString family = {};
+            int size = 0;
+        } font;
 
         bool operator==(const TextFormat& _other) const;
 
@@ -38,10 +51,17 @@ public:
     };
     struct CORE_LIBRARY_EXPORT ReviewComment {
         QString author;
+        QString authorEmail;
         QString date;
         QString text;
+        bool isEdited = false;
 
         bool operator==(const ReviewComment& _other) const;
+
+        /**
+         * @brief Определить одинаков ли автор и дата создания коммента
+         */
+        bool isPartiallyEqual(const ReviewComment& _other) const;
     };
     struct CORE_LIBRARY_EXPORT ReviewMark : TextPart {
         QColor textColor;
@@ -51,25 +71,92 @@ public:
 
         bool operator==(const ReviewMark& _other) const;
 
+        /**
+         * @brief Определить одинаково ли форматирование и первый комментарий
+         */
+        bool isPartiallyEqual(const ReviewMark& _other) const;
+
         QTextCharFormat charFormat() const;
+    };
+    struct CORE_LIBRARY_EXPORT Number {
+        int value = 0;
+        QString text;
+    };
+    struct CORE_LIBRARY_EXPORT Bookmark {
+        QColor color;
+        QString name;
+
+        bool operator==(const Bookmark& _other) const;
+
+        bool isValid() const;
+    };
+    struct CORE_LIBRARY_EXPORT Revision : TextPart {
+        QColor color;
+
+        bool operator==(const Revision& _other) const;
     };
 
 public:
-    TextModelTextItem();
-    explicit TextModelTextItem(QXmlStreamReader& _contentReaded);
+    explicit TextModelTextItem(const TextModel* _model);
     ~TextModelTextItem() override;
+
+    /**
+     * @brief Подтип элемента
+     */
+    int subtype() const override final;
 
     /**
      * @brief Тип параграфа
      */
-    TextParagraphType paragraphType() const;
+    const TextParagraphType& paragraphType() const;
     void setParagraphType(TextParagraphType _type);
+
+    /**
+     * @brief Номер элемента
+     */
+    std::optional<Number> number() const;
+    void setNumber(int _number);
+
+    /**
+     * @brief Является ли блок декорацией
+     */
+    bool isCorrection() const;
+    void setCorrection(bool _correction);
+
+    /**
+     * @brief Является ли блок корректировкой вида (CONT) внутри разорванной реплики
+     */
+    bool isCorrectionContinued() const;
+    void setCorrectionContinued(bool _continued);
+
+    /**
+     * @brief Разорван ли текст блока между страницами
+     */
+    bool isBreakCorrectionStart() const;
+    void setBreakCorrectionStart(bool _broken);
+    bool isBreakCorrectionEnd() const;
+    void setBreakCorrectionEnd(bool _broken);
+
+    /**
+     * @brief Находится ли элемент в первой колонке таблицы
+     * @note Если значение не задано, то элемент находится вне таблицы
+     */
+    std::optional<bool> isInFirstColumn() const;
+    void setInFirstColumn(const std::optional<bool>& _in);
 
     /**
      * @brief Выравнивание текста в блоке
      */
     std::optional<Qt::Alignment> alignment() const;
     void setAlignment(Qt::Alignment _align);
+    void clearAlignment();
+
+    /**
+     * @brief Закладка
+     */
+    std::optional<Bookmark> bookmark() const;
+    void setBookmark(const Bookmark& _bookmark);
+    void clearBookmark();
 
     /**
      * @brief Текст элемента
@@ -78,7 +165,8 @@ public:
     void setText(const QString& _text);
 
     /**
-     * @brief Удалить текст, начиная с заданной позиции, при этом корректируется и остальной контент блока
+     * @brief Удалить текст, начиная с заданной позиции, при этом корректируется и остальной контент
+     * блока
      */
     void removeText(int _from);
 
@@ -96,17 +184,27 @@ public:
     void setReviewMarks(const QVector<QTextLayout::FormatRange>& _reviewMarks);
 
     /**
+     * @brief Ревизии
+     */
+    const QVector<Revision>& revisions() const;
+
+    /**
      * @brief Объединить с заданным элементом
      */
     void mergeWith(const TextModelTextItem* _other);
 
     /**
-     * @brief Определяем интерфейс получения данных элемента
+     * @brief Определяем интерфейс получения данных блока
      */
     QVariant data(int _role) const override;
 
     /**
-     * @brief Сформировать xml блока
+     * @brief Считать контент из заданного ридера
+     */
+    void readContent(QXmlStreamReader& _contentReader) override final;
+
+    /**
+     * @brief Определяем интерфейс для получения XML блока
      */
     QByteArray toXml() const override;
     QByteArray toXml(int _from, int _length);
@@ -121,7 +219,7 @@ public:
      */
     bool isEqual(TextModelItem* _item) const override;
 
-private:
+protected:
     /**
      * @brief Пометить блок изменённым
      */
@@ -132,4 +230,8 @@ private:
     QScopedPointer<Implementation> d;
 };
 
+
 } // namespace BusinessLayer
+
+Q_DECLARE_METATYPE(BusinessLayer::TextModelTextItem::ReviewComment)
+Q_DECLARE_METATYPE(QVector<BusinessLayer::TextModelTextItem::ReviewComment>)

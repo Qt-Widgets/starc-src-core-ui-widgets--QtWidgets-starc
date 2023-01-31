@@ -174,11 +174,12 @@ void WebLoader::run()
                 this, static_cast<void (WebLoader::*)(qint64, qint64)>(&WebLoader::uploadProgress));
         connect(reply.data(), &QNetworkReply::downloadProgress,
                 this, static_cast<void (WebLoader::*)(qint64, qint64)>(&WebLoader::downloadProgress));
-        connect(reply.data(), static_cast<void (QNetworkReply::*)(QNetworkReply::NetworkError)>(&QNetworkReply::error),
-                this, &WebLoader::downloadError);
+        connect(reply.data(), &QNetworkReply::errorOccurred, this, &WebLoader::downloadError);
+#if QT_CONFIG(ssl)
         connect(reply.data(), &QNetworkReply::sslErrors, this, &WebLoader::downloadSslErrors);
         connect(reply.data(), &QNetworkReply::sslErrors,
                 reply.data(), static_cast<void (QNetworkReply::*)()>(&QNetworkReply::ignoreSslErrors));
+#endif
 
         //
         // Таймер для прерывания работы
@@ -315,6 +316,7 @@ void WebLoader::downloadError(QNetworkReply::NetworkError _networkError)
     }
 }
 
+#if QT_CONFIG(ssl)
 void WebLoader::downloadSslErrors(const QList<QSslError>& _errors)
 {
     QString lastErrorDetails;
@@ -327,6 +329,7 @@ void WebLoader::downloadSslErrors(const QList<QSslError>& _errors)
 
     emit error(lastErrorDetails, m_requestSourceUrl);
 }
+#endif
 
 void WebLoader::initNetworkManager()
 {

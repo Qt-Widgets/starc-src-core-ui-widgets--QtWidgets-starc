@@ -1,17 +1,15 @@
 #include "abstract_model.h"
 
 #include "abstract_image_wrapper.h"
+#include "abstract_model_item.h"
 
 #include <domain/document_object.h>
-
 #include <utils/diff_match_patch/diff_match_patch_controller.h>
 #include <utils/tools/debouncer.h>
 
 #include <QScopedValueRollback>
 
-
-namespace BusinessLayer
-{
+namespace BusinessLayer {
 
 class AbstractModel::Implementation
 {
@@ -23,6 +21,11 @@ public:
      * @brief Документ на основе которого строится модель
      */
     Domain::DocumentObject* document = nullptr;
+
+    /**
+     * @brief Счётчик транзакций операции сброса модели
+     */
+    int resetModelTransationsCounter = 0;
 
     /**
      * @brief Загрузчик фотографий
@@ -41,6 +44,11 @@ public:
     bool isRedoInProgress = false;
 
     /**
+     * @brief Выполняется ли в данный момент наложение изменений
+     */
+    bool isChangesApplyingInProgress = false;
+
+    /**
      * @brief Список отменённых действий, которые можно повторить
      */
     struct Change {
@@ -55,14 +63,19 @@ public:
     int undoStep = 0;
 
     /**
+     * @brief Позиция текста после отмены/повтора последнего действия
+     */
+    ChangeCursor undoRedoPosition;
+
+    /**
      * @brief Дебаунсер на изменение контента документа
      */
     Debouncer updateDocumentContentDebouncer;
 };
 
 AbstractModel::Implementation::Implementation(const QVector<QString>& _tags)
-    : dmpController(_tags),
-      updateDocumentContentDebouncer(300)
+    : dmpController(_tags)
+    , updateDocumentContentDebouncer(300)
 {
 }
 
@@ -71,10 +84,11 @@ AbstractModel::Implementation::Implementation(const QVector<QString>& _tags)
 
 
 AbstractModel::AbstractModel(const QVector<QString>& _tags, QObject* _parent)
-    : QAbstractItemModel(_parent),
-      d(new Implementation(_tags))
+    : QAbstractItemModel(_parent)
+    , d(new Implementation(_tags))
 {
-    connect(&d->updateDocumentContentDebouncer, &Debouncer::gotWork, this, &AbstractModel::saveChanges);
+    connect(&d->updateDocumentContentDebouncer, &Debouncer::gotWork, this,
+            &AbstractModel::saveChanges);
 
     connect(this, &AbstractModel::modelReset, this, &AbstractModel::updateDocumentContent);
     connect(this, &AbstractModel::rowsInserted, this, &AbstractModel::updateDocumentContent);
@@ -98,7 +112,11 @@ void AbstractModel::setDocument(Domain::DocumentObject* _document)
 
     d->document = _document;
 
-    initDocument();
+    if (d->document) {
+        initDocument();
+    } else {
+        clearDocument();
+    }
 }
 
 QString AbstractModel::documentName() const
@@ -108,12 +126,26 @@ QString AbstractModel::documentName() const
 
 void AbstractModel::setDocumentName(const QString& _name)
 {
-    Q_UNUSED(_name);
+    Q_UNUSED(_name)
+}
+
+QColor AbstractModel::documentColor() const
+{
+    return {};
+}
+
+void AbstractModel::setDocumentColor(const QColor& _color)
+{
+    Q_UNUSED(_color)
 }
 
 void AbstractModel::setImageWrapper(AbstractImageWrapper* _image)
 {
     d->image = _image;
+
+    if (d->image != nullptr) {
+        initImageWrapper();
+    }
 }
 
 void AbstractModel::clear()
@@ -122,6 +154,15 @@ void AbstractModel::clear()
     d->document = nullptr;
 
     clearDocument();
+}
+
+void AbstractModel::reassignContent()
+{
+    if (d->document == nullptr) {
+        return;
+    }
+
+    d->document->setContent(toXml());
 }
 
 void AbstractModel::saveChanges()
@@ -142,14 +183,20 @@ void AbstractModel::saveChanges()
         return;
     }
 
+    //
+    // Уведомляем о смене контента только, если контент уже был установлен,
+    // если содержимое документа было пустым (как правило это кейс после создания документа),
+    // то отменять и нечего, поэтому игнорируем такие изменения
+    //
+    const auto needToNotifyAboutContentChanged = !d->document->content().isEmpty();
     d->document->setContent(content);
-
-    emit contentsChanged(undoPatch, redoPatch);
+    if (needToNotifyAboutContentChanged) {
+        emit contentsChanged(undoPatch, redoPatch);
+    }
 }
 
-void AbstractModel::undo()
+ChangeCursor AbstractModel::undo()
 {
-
     //
     // Перед отменой последнего действия нужно сохранить все несохранённые изменения
     //
@@ -159,30 +206,86 @@ void AbstractModel::undo()
     // И после этого уже можно отменять
     //
     emit undoRequested(d->undoStep);
+
+    return d->undoRedoPosition;
 }
 
 void AbstractModel::undoChange(const QByteArray& _undo, const QByteArray& _redo)
 {
     QScopedValueRollback isUndoInProgressRollback(d->isUndoInProgress, true);
 
-    applyPatch(_undo);
+    d->undoRedoPosition = applyPatch(_undo);
     saveChanges();
 
-    d->undoedChanges.append({_undo, _redo});
+    d->undoedChanges.append({ _undo, _redo });
     d->undoStep += 2;
 }
 
-void AbstractModel::redo()
+ChangeCursor AbstractModel::redo()
 {
     if (d->undoedChanges.isEmpty()) {
-        return;
+        return {};
     }
 
     QScopedValueRollback isRedoInProgressRollback(d->isRedoInProgress, true);
 
     const auto change = d->undoedChanges.takeLast();
-    applyPatch(change.redo);
+    d->undoRedoPosition = applyPatch(change.redo);
     saveChanges();
+
+    return d->undoRedoPosition;
+}
+
+bool AbstractModel::mergeDocumentChanges(const QByteArray _content,
+                                         const QVector<QByteArray>& _patches)
+{
+    if (_content.isEmpty() && _patches.isEmpty()) {
+        return false;
+    }
+
+    auto newContent = _content.isEmpty() ? toXml() : _content;
+    for (const auto& patch : _patches) {
+        auto patchedContent = d->dmpController.applyPatch(newContent, patch);
+
+        //
+        // Если патч не принёс успеха, значит ошибка в наложении изменений
+        //
+        if (patchedContent.size() == newContent.size() && patchedContent == newContent) {
+            return false;
+        }
+
+        newContent.swap(patchedContent);
+    }
+
+
+    beginResetModelTransaction();
+    clearDocument();
+    document()->setContent(newContent);
+    initDocument();
+    endResetModelTransaction();
+    return true;
+}
+
+void AbstractModel::applyDocumentChanges(const QVector<QByteArray>& _patches)
+{
+    QScopedValueRollback isChangesApplyingInProgressRollback(d->isChangesApplyingInProgress, true);
+
+    //
+    // Накладываем изменения
+    //
+    for (const auto& patch : _patches) {
+        applyPatch(patch);
+    }
+
+    //
+    // Чтобы изменения не продуцировали патч, применим новый контент с изменениями к документу
+    //
+    reassignContent();
+}
+
+bool AbstractModel::isChangesApplyingInProcess() const
+{
+    return d->isChangesApplyingInProgress;
 }
 
 QModelIndex AbstractModel::index(int _row, int _column, const QModelIndex& _parent) const
@@ -223,17 +326,42 @@ QVariant AbstractModel::data(const QModelIndex& _index, int _role) const
     return {};
 }
 
-void AbstractModel::applyPatch(const QByteArray& _patch)
+void AbstractModel::beginResetModelTransaction()
+{
+    if (d->resetModelTransationsCounter == 0) {
+        beginResetModel();
+    }
+
+    ++d->resetModelTransationsCounter;
+}
+
+void AbstractModel::endResetModelTransaction()
+{
+    --d->resetModelTransationsCounter;
+
+    if (d->resetModelTransationsCounter == 0) {
+        endResetModel();
+    }
+}
+
+void AbstractModel::initImageWrapper()
+{
+}
+
+ChangeCursor AbstractModel::applyPatch(const QByteArray& _patch)
 {
     const auto newContent = d->dmpController.applyPatch(toXml(), _patch);
 
     clearDocument();
     document()->setContent(newContent);
     initDocument();
+
+    return {};
 }
 
 AbstractImageWrapper* AbstractModel::imageWrapper() const
 {
+    Q_ASSERT(d->image);
     return d->image;
 }
 
@@ -247,7 +375,7 @@ void AbstractModel::updateDocumentContent()
     //
     // В режиме отмены/повтора последнего действия сохранение изменений будет делаться вручную
     //
-    if (d->isUndoInProgress || d->isRedoInProgress) {
+    if (d->isUndoInProgress || d->isRedoInProgress || d->isChangesApplyingInProgress) {
         return;
     }
 

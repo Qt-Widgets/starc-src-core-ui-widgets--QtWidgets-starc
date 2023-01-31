@@ -1,8 +1,7 @@
 #pragma once
 
-#include <corelib_global.h>
-
 #include <chrono>
+#include <corelib_global.h>
 
 class QString;
 
@@ -14,5 +13,7 @@ class CORE_LIBRARY_EXPORT TimeHelper
 {
 public:
     static QString toString(std::chrono::seconds _seconds);
-};
+    static QString toString(std::chrono::milliseconds _milliseconds);
 
+    static QString toLongString(std::chrono::seconds _seconds);
+};

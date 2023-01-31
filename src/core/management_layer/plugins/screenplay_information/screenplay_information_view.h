@@ -1,18 +1,26 @@
 #pragma once
 
+#include <interfaces/ui/i_document_view.h>
 #include <ui/widgets/widget/widget.h>
 
 
-namespace Ui
-{
+namespace Ui {
 
-class ScreenplayInformationView : public Widget
+class ScreenplayInformationView : public Widget, public IDocumentView
 {
     Q_OBJECT
 
 public:
     explicit ScreenplayInformationView(QWidget* _parent = nullptr);
     ~ScreenplayInformationView() override;
+
+    /**
+     * @brief Реализация интерфейса IDocumentView
+     */
+    /** @{ */
+    QWidget* asQWidget() override;
+    void setEditingMode(ManagementLayer::DocumentEditingMode _mode) override;
+    /** @} */
 
     void setName(const QString& _name);
     Q_SIGNAL void nameChanged(const QString& _name);

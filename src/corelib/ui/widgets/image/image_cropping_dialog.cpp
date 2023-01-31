@@ -2,8 +2,11 @@
 
 #include <ui/design_system/design_system.h>
 #include <ui/widgets/button/button.h>
+#include <ui/widgets/icon_button/icon_button.h>
 #include <ui/widgets/image_cropper/image_cropper.h>
 #include <ui/widgets/label/label.h>
+#include <utils/helpers/color_helper.h>
+#include <utils/helpers/image_helper.h>
 
 #include <QGridLayout>
 
@@ -15,20 +18,33 @@ public:
 
     ImageCropper* imageCropper = nullptr;
     Body1Label* imageCroppingLabel = nullptr;
-    QHBoxLayout* buttonsLayout = nullptr;
+    Body2Label* imageCroppingNote = nullptr;
+    IconButton* rotateLeftButton = nullptr;
+    IconButton* rotateRightButton = nullptr;
     Button* cancelButton = nullptr;
     Button* selectButton = nullptr;
+    QHBoxLayout* buttonsLayout = nullptr;
 };
 
 ImageCroppingDialog::Implementation::Implementation(QWidget* _parent)
-    : imageCropper(new ImageCropper(_parent)),
-      imageCroppingLabel(new Body1Label(_parent)),
-      buttonsLayout(new QHBoxLayout),
-      cancelButton(new Button(_parent)),
-      selectButton(new Button(_parent))
+    : imageCropper(new ImageCropper(_parent))
+    , imageCroppingLabel(new Body1Label(_parent))
+    , imageCroppingNote(new Body2Label(_parent))
+    , rotateLeftButton(new IconButton(_parent))
+    , rotateRightButton(new IconButton(_parent))
+    , cancelButton(new Button(_parent))
+    , selectButton(new Button(_parent))
+    , buttonsLayout(new QHBoxLayout)
 {
+    imageCroppingNote->hide();
+
+    rotateLeftButton->setIcon(u8"\U000F0465");
+    rotateRightButton->setIcon(u8"\U000F0467");
+
     buttonsLayout->setContentsMargins({});
     buttonsLayout->setSpacing(0);
+    buttonsLayout->addWidget(rotateLeftButton);
+    buttonsLayout->addWidget(rotateRightButton);
     buttonsLayout->addStretch();
     buttonsLayout->addWidget(cancelButton);
     buttonsLayout->addWidget(selectButton);
@@ -39,23 +55,32 @@ ImageCroppingDialog::Implementation::Implementation(QWidget* _parent)
 
 
 ImageCroppingDialog::ImageCroppingDialog(QWidget* _parent)
-    : AbstractDialog(_parent),
-      d(new Implementation(this))
+    : AbstractDialog(_parent)
+    , d(new Implementation(this))
 {
+    setRejectButton(d->cancelButton);
+
     contentsLayout()->setContentsMargins({});
     contentsLayout()->setSpacing(0);
-    contentsLayout()->addWidget(d->imageCropper, 0, 0);
-    contentsLayout()->addWidget(d->imageCroppingLabel, 1, 0);
-    contentsLayout()->addLayout(d->buttonsLayout, 2, 0);
+    auto row = 0;
+    contentsLayout()->addWidget(d->imageCropper, row++, 0);
+    contentsLayout()->addWidget(d->imageCroppingLabel, row++, 0);
+    contentsLayout()->addWidget(d->imageCroppingNote, row++, 0);
+    contentsLayout()->addLayout(d->buttonsLayout, row++, 0);
 
+    connect(d->rotateLeftButton, &IconButton::clicked, this, [this] {
+        constexpr bool rotateLeft = true;
+        d->imageCropper->setImage(ImageHelper::rotateImage(d->imageCropper->image(), rotateLeft));
+    });
+    connect(d->rotateRightButton, &IconButton::clicked, this, [this] {
+        constexpr bool rotateLeft = false;
+        d->imageCropper->setImage(ImageHelper::rotateImage(d->imageCropper->image(), rotateLeft));
+    });
     connect(d->cancelButton, &Button::clicked, this, &ImageCroppingDialog::hideDialog);
     connect(d->selectButton, &Button::clicked, this, [this] {
         emit imageSelected(d->imageCropper->croppedImage());
         hideDialog();
     });
-
-    updateTranslations();
-    designSystemChangeEvent(nullptr);
 }
 
 ImageCroppingDialog::~ImageCroppingDialog() = default;
@@ -80,6 +105,12 @@ void ImageCroppingDialog::setImageCroppingText(const QString& _text)
     d->imageCroppingLabel->setText(_text);
 }
 
+void ImageCroppingDialog::setImageCroppingNote(const QString& _text)
+{
+    d->imageCroppingNote->setText(_text);
+    d->imageCroppingNote->setVisible(!_text.isEmpty());
+}
+
 QWidget* ImageCroppingDialog::focusedWidgetAfterShow() const
 {
     return d->imageCropper;
@@ -92,6 +123,8 @@ QWidget* ImageCroppingDialog::lastFocusableWidget() const
 
 void ImageCroppingDialog::updateTranslations()
 {
+    d->rotateLeftButton->setToolTip(tr("Rotate image anticlockwise"));
+    d->rotateLeftButton->setToolTip(tr("Rotate image clockwise"));
     d->cancelButton->setText(tr("Cancel"));
     d->selectButton->setText(tr("Select"));
 }
@@ -107,21 +140,29 @@ void ImageCroppingDialog::designSystemChangeEvent(DesignSystemChangeEvent* _even
 
     d->imageCroppingLabel->setTextColor(Ui::DesignSystem::color().onBackground());
     d->imageCroppingLabel->setBackgroundColor(Ui::DesignSystem::color().background());
-    d->imageCroppingLabel->setContentsMargins(
-                QMarginsF(Ui::DesignSystem::layout().px24(),
-                          Ui::DesignSystem::layout().px12(),
-                          Ui::DesignSystem::layout().px24(),
-                          0.0)
-                .toMargins());
+    d->imageCroppingLabel->setContentsMargins(QMarginsF(Ui::DesignSystem::layout().px24(),
+                                                        Ui::DesignSystem::layout().px12(),
+                                                        Ui::DesignSystem::layout().px24(), 0.0)
+                                                  .toMargins());
+    d->imageCroppingNote->setTextColor(ColorHelper::transparent(
+        Ui::DesignSystem::color().onBackground(), Ui::DesignSystem::inactiveTextOpacity()));
+    d->imageCroppingNote->setBackgroundColor(Ui::DesignSystem::color().background());
+    d->imageCroppingNote->setContentsMargins(QMarginsF(Ui::DesignSystem::layout().px24(),
+                                                       Ui::DesignSystem::layout().px12(),
+                                                       Ui::DesignSystem::layout().px24(), 0.0)
+                                                 .toMargins());
 
-    for (auto button : { d->cancelButton,
-                         d->selectButton }) {
-        button->setBackgroundColor(Ui::DesignSystem::color().secondary());
-        button->setTextColor(Ui::DesignSystem::color().secondary());
+    for (auto button : { d->rotateLeftButton, d->rotateRightButton }) {
+        button->setBackgroundColor(Ui::DesignSystem::color().background());
+        button->setTextColor(Ui::DesignSystem::color().onBackground());
+    }
+    for (auto button : { d->cancelButton, d->selectButton }) {
+        button->setBackgroundColor(Ui::DesignSystem::color().accent());
+        button->setTextColor(Ui::DesignSystem::color().accent());
     }
 
-    d->buttonsLayout->setContentsMargins(QMarginsF(Ui::DesignSystem::layout().px12(),
-                                                   Ui::DesignSystem::layout().px12(),
-                                                   Ui::DesignSystem::layout().px16(),
-                                                   Ui::DesignSystem::layout().px8()).toMargins());
+    d->buttonsLayout->setContentsMargins(
+        QMarginsF(Ui::DesignSystem::layout().px12(), Ui::DesignSystem::layout().px12(),
+                  Ui::DesignSystem::layout().px16(), Ui::DesignSystem::layout().px16())
+            .toMargins());
 }

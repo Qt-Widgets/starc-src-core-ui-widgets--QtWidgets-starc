@@ -1,25 +1,35 @@
 #include "project.h"
 
+#include <domain/starcloud_api.h>
+#include <interfaces/management_layer/i_document_manager.h>
+
 #include <QApplication>
 #include <QDateTime>
+#include <QFileInfo>
 #include <QPixmap>
 
 
-namespace ManagementLayer
-{
+namespace ManagementLayer {
 
 class Project::Implementation
 {
 public:
     ProjectType type = ProjectType::Invalid;
     QString path;
+    QString realPath;
 
     mutable QPixmap poster;
     QString posterPath;
+    QUuid uuid;
     QString name;
     QString logline;
     QDateTime lastEditTime;
+    bool canAskAboutSwitch = true;
+    bool canBeSynced = true;
     int id = -1;
+    bool isOwner = true;
+    DocumentEditingMode editingMode = DocumentEditingMode::Edit;
+    QVector<Domain::ProjectCollaboratorInfo> collaborators;
 };
 
 
@@ -41,6 +51,8 @@ Project::Project(const Project& _other)
 {
 }
 
+Project::~Project() = default;
+
 const Project& Project::operator=(const Project& _other)
 {
     d.reset(new Implementation(*_other.d));
@@ -54,15 +66,13 @@ bool Project::isValid() const
 
 bool Project::isLocal() const
 {
-    return d->type == ProjectType::Local;
+    return d->type == ProjectType::Local || d->type == ProjectType::LocalShadow;
 }
 
 bool Project::isRemote() const
 {
-    return d->type == ProjectType::Remote;
+    return d->type == ProjectType::Cloud;
 }
-
-Project::~Project() = default;
 
 ProjectType Project::type() const
 {
@@ -74,34 +84,6 @@ void Project::setType(ProjectType _type)
     d->type = _type;
 }
 
-QString Project::name() const
-{
-    return d->name;
-}
-
-void Project::setName(const QString& _name)
-{
-    d->name = _name;
-}
-
-QString Project::logline() const
-{
-    return d->logline;
-}
-
-void Project::setLogline(const QString& _logline)
-{
-    d->logline = _logline;
-}
-
-QString Project::displayPath() const
-{
-    //
-    // TODO: Remote project path
-    //
-    return d->path;
-}
-
 QString Project::path() const
 {
     return d->path;
@@ -110,12 +92,28 @@ QString Project::path() const
 void Project::setPath(const QString& _path)
 {
     d->path = _path;
+
+    if (d->type == ProjectType::Local || d->type == ProjectType::LocalShadow) {
+        d->editingMode = QFileInfo(d->path).isWritable() ? DocumentEditingMode::Edit
+                                                         : DocumentEditingMode::Read;
+    }
+}
+
+QString Project::realPath() const
+{
+    return d->realPath;
+}
+
+void Project::setRealPath(const QString& _path)
+{
+    d->realPath = _path;
 }
 
 const QPixmap& Project::poster() const
 {
     if (d->poster.isNull()) {
-        if (!d->poster.load(d->posterPath)) {
+        d->poster.load(d->posterPath);
+        if (d->poster.isNull()) {
             static const QPixmap kDefaultPoster(":/images/movie-poster");
             d->poster = kDefaultPoster;
         }
@@ -143,20 +141,52 @@ void Project::setPosterPath(const QString& _path)
     d->poster = {};
 }
 
+QUuid Project::uuid() const
+{
+    return d->uuid;
+}
+
+void Project::setUuid(const QUuid& _uuid)
+{
+    d->uuid = _uuid;
+}
+
+QString Project::name() const
+{
+    return d->name;
+}
+
+void Project::setName(const QString& _name)
+{
+    d->name = _name;
+}
+
+QString Project::logline() const
+{
+    return d->logline;
+}
+
+void Project::setLogline(const QString& _logline)
+{
+    d->logline = _logline;
+}
+
 QString Project::displayLastEditTime() const
 {
     switch (d->lastEditTime.daysTo(QDateTime::currentDateTime())) {
-        case 0: {
-            return QApplication::translate("Domain::Project", "today at") + d->lastEditTime.toString(" hh:mm");
-        }
+    case 0: {
+        return QApplication::translate("Domain::Project", "today at")
+            + d->lastEditTime.toString(" hh:mm");
+    }
 
-        case 1: {
-            return QApplication::translate("Domain::Project", "yesterday at") + d->lastEditTime.toString(" hh:mm");
-        }
+    case 1: {
+        return QApplication::translate("Domain::Project", "yesterday at")
+            + d->lastEditTime.toString(" hh:mm");
+    }
 
-        default: {
-            return d->lastEditTime.toString("dd.MM.yyyy hh:mm");
-        }
+    default: {
+        return d->lastEditTime.toString("dd.MM.yyyy hh:mm");
+    }
     }
 }
 
@@ -170,6 +200,26 @@ void Project::setLastEditTime(const QDateTime& _time)
     d->lastEditTime = _time;
 }
 
+bool Project::canAskAboutSwitch() const
+{
+    return d->canAskAboutSwitch;
+}
+
+void Project::setCanAskAboutSwitch(bool _can)
+{
+    d->canAskAboutSwitch = _can;
+}
+
+bool Project::canBeSynced() const
+{
+    return d->canBeSynced;
+}
+
+void Project::setCanBeSynced(bool _can)
+{
+    d->canBeSynced = _can;
+}
+
 int Project::id() const
 {
     return d->id;
@@ -180,47 +230,82 @@ void Project::setId(int _id)
     d->id = _id;
 }
 
+bool Project::isOwner() const
+{
+    return d->isOwner;
+}
+
+void Project::setOwner(bool _isOwner)
+{
+    d->isOwner = _isOwner;
+}
+
+DocumentEditingMode Project::editingMode() const
+{
+    return d->editingMode;
+}
+
+void Project::setEditingMode(DocumentEditingMode _mode)
+{
+    d->editingMode = _mode;
+}
+
+bool Project::isReadOnly() const
+{
+    return d->editingMode == DocumentEditingMode::Read;
+}
+
+QVector<Domain::ProjectCollaboratorInfo> Project::collaborators() const
+{
+    return d->collaborators;
+}
+
+void Project::setCollaborators(const QVector<Domain::ProjectCollaboratorInfo>& _collaborators)
+{
+    d->collaborators = _collaborators;
+}
+
 QVariant Project::data(int _role) const
 {
     switch (_role) {
-        case ProjectDataRole::Type: {
-            return static_cast<int>(type());
-        }
+    case ProjectDataRole::Type: {
+        return static_cast<int>(type());
+    }
 
-        case ProjectDataRole::Path: {
-            return path();
-        }
+    case ProjectDataRole::Path: {
+        return path();
+    }
 
-        case ProjectDataRole::PosterPath: {
-            return posterPath();
-        }
+    case ProjectDataRole::PosterPath: {
+        return posterPath();
+    }
 
-        case ProjectDataRole::Name: {
-            return name();
-        }
+    case ProjectDataRole::Name: {
+        return name();
+    }
 
-        case ProjectDataRole::Logline: {
-            return logline();
-        }
+    case ProjectDataRole::Logline: {
+        return logline();
+    }
 
-        case ProjectDataRole::LastEditTime: {
-            return lastEditTime();
-        }
+    case ProjectDataRole::LastEditTime: {
+        return lastEditTime();
+    }
 
-        default: {
-            return {};
-        }
+    default: {
+        return {};
+    }
     }
 }
 
 bool operator==(const Project& _lhs, const Project& _rhs)
 {
-    return _lhs.type() == _rhs.type()
-            && _lhs.path() == _rhs.path()
-            && _lhs.posterPath() == _rhs.posterPath()
-            && _lhs.name() == _rhs.name()
-            && _lhs.logline() == _rhs.logline()
-            && _lhs.lastEditTime() == _rhs.lastEditTime();
+    if (!_lhs.uuid().isNull() && !_rhs.uuid().isNull()) {
+        return _lhs.uuid() == _rhs.uuid();
+    }
+
+    return _lhs.type() == _rhs.type() && _lhs.path() == _rhs.path() && _lhs.name() == _rhs.name()
+        && _lhs.logline() == _rhs.logline() && _lhs.lastEditTime() == _rhs.lastEditTime();
 }
 
 
@@ -238,8 +323,8 @@ public:
 
 
 ProjectsModel::ProjectsModel(QObject* _parent)
-    : QAbstractListModel(_parent),
-      d(new Implementation)
+    : QAbstractListModel(_parent)
+    , d(new Implementation)
 {
 }
 
@@ -251,7 +336,7 @@ const Project& ProjectsModel::projectAt(int _row) const
 
 ProjectsModel::~ProjectsModel() = default;
 
-void ProjectsModel::append(const Project &_project)
+void ProjectsModel::append(const Project& _project)
 {
     beginInsertRows({}, d->projects.size(), d->projects.size());
     d->projects.append(_project);
@@ -276,7 +361,7 @@ void ProjectsModel::prepend(const Project& _project)
     endInsertRows();
 }
 
-void ProjectsModel::remove(const Project &_project)
+void ProjectsModel::remove(const Project& _project)
 {
     const int kInvalidIndex = -1;
     const int projectIndex = d->projects.indexOf(_project);
@@ -348,9 +433,9 @@ bool ProjectsModel::moveProject(const Project& _moved, const Project& _insertAft
     // Перемещаем
     //
     beginMoveRows({}, movedProjectIndex, movedProjectIndex, {}, insertAfterProjectIndex + 1);
-    d->projects.move(movedProjectIndex, movedProjectIndex > insertAfterProjectIndex
-                                        ? insertAfterProjectIndex + 1
-                                        : insertAfterProjectIndex);
+    d->projects.move(movedProjectIndex,
+                     movedProjectIndex > insertAfterProjectIndex ? insertAfterProjectIndex + 1
+                                                                 : insertAfterProjectIndex);
     endMoveRows();
     return true;
 }
@@ -384,8 +469,7 @@ QVariant ProjectsModel::data(const QModelIndex& _index, int _role) const
     }
 
     const int projectIndex = _index.row();
-    if (projectIndex < 0
-        || projectIndex >= d->projects.size()) {
+    if (projectIndex < 0 || projectIndex >= d->projects.size()) {
         return {};
     }
 

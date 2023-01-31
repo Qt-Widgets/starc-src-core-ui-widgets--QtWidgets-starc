@@ -3,8 +3,7 @@
 #include <QObject>
 
 
-namespace ManagementLayer
-{
+namespace ManagementLayer {
 
 /**
  * @brief Управляющий импортом документов
@@ -22,6 +21,11 @@ public:
      */
     void import();
 
+    /**
+     * @brief Импортировать все возможные данные из указанного файла
+     */
+    void import(const QString& _filePath);
+
 signals:
     /**
      * @brief Персонаж загружен
@@ -37,7 +41,8 @@ signals:
      * @brief Сценарий загружен
      */
     void screenplayImported(const QString& _name, const QString& _titlePage,
-        const QString& _synopsis, const QString& _treatment, const QString& _screenplay);
+                            const QString& _synopsis, const QString& _treatment,
+                            const QString& _screenplay);
 
 private:
     class Implementation;

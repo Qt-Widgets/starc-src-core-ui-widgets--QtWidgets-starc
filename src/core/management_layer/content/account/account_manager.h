@@ -2,12 +2,13 @@
 
 #include <QObject>
 
-class PaymentInfo;
-class Widget;
+namespace Domain {
+struct PaymentOption;
+struct AccountInfo;
+} // namespace Domain
 
 
-namespace ManagementLayer
-{
+namespace ManagementLayer {
 
 /**
  * @brief Менеджер личного кабинета пользователя
@@ -20,88 +21,77 @@ public:
     AccountManager(QObject* _parent, QWidget* _parentWidget);
     ~AccountManager() override;
 
-    Widget* accountBar() const;
     QWidget* toolBar() const;
     QWidget* navigator() const;
     QWidget* view() const;
 
     /**
+     * @brief Скорректировать интерфейс в зависимости от того есть ли подключение к серверу
+     */
+    void setConnected(bool _connected);
+
+    /**
      * @brief Войти в личный кабинет
      */
-    void login();
+    void signIn();
 
     /**
-     * @brief Разрешить пользователю зарегистрироваться
+     * @brief Задать параметры кода активации
      */
-    void allowRegistration();
+    void setConfirmationCodeInfo(int _codeLength);
 
     /**
-     * @brief Подготовить диалог авторизации ко вводу кода подтверждения регистрации
+     * @brief Завершить авторизацию (если это новый пользователь, то необходимо перейти в кабинет)
      */
-    void prepareToEnterRegistrationConfirmationCode();
-
-    /**
-     * @brief Задать ошибку ввода проверочного кода при регистрации
-     */
-    void setRegistrationConfirmationError(const QString& _error);
-
-    /**
-     * @brief Разрешить пользователю авторизоваться
-     */
-    void allowLogin();
-
-    /**
-     * @brief Подготовить диалог авторизации ко вводу кода подтверждения смены пароля
-     */
-    void prepareToEnterRestorePasswordConfirmationCode();
-
-    /**
-     * @brief Разрешить сменить пароль
-     */
-    void allowChangePassword();
-
-    /**
-     * @brief Задать ошибку ввода проверочного кода при сбросе пароля
-     */
-    void setRestorePasswordConfirmationError(const QString& _error);
-
-    /**
-     * @brief Задать ошибку ввода пароля при авторизации
-     */
-    void setLoginPasswordError(const QString& _error);
-
-    /**
-     * @brief Завершить авторизацию
-     */
-    void completeLogin();
-
-    /**
-     * @brief Завершить выход из аккаунта
-     */
-    void completeLogout();
+    void completeSignIn(bool _openAccount);
 
     /**
      * @brief Установить параметры аккаунта
      */
-    void setAccountParameters(qint64 _availableSpace, const QString& _email, qint64 _monthPrice,
-        bool _receiveEmailNotifications, const QString& _userName, const QByteArray& _avatar);
-    void setPaymentInfo(const PaymentInfo& _info);
-    void setSubscriptionEnd(const QString& _subscriptionEnd);
-    void setUserName(const QString& _userName);
-    void setReceiveEmailNotifications(bool _receive);
-    void setAvatar(const QByteArray& _avatar);
-    void setAvatar(const QPixmap& _avatar);
-    void removeAvatar();
+    void setAccountInfo(const Domain::AccountInfo& _accountInfo);
+    void clearAccountInfo();
 
     /**
-     * @brief Уведомить о появившемся сетевом соединении
+     * @brief Проапгрейдить учётную любым из способов
      */
-    void notifyConnected();
+    void upgradeAccountToPro();
+    void upgradeAccountToTeam();
 
     /**
-     * @brief Уведомить о пропавшем сетевом соединении
+     * @brief Активировать бесплатный период для ПРО
      */
-    void notifyDisconnected();
+    bool tryProForFree();
+
+    /**
+     * @brief Оплатить ПРО версию
+     */
+    void buyProLifetme();
+    void renewPro();
+
+    /**
+     * @brief Активировать бесплатный период для ПРО
+     */
+    bool tryTeamForFree();
+
+    /**
+     * @brief Оплатить ПРО версию
+     */
+    void renewTeam();
+
+    /**
+     * @brief Докупить кредиты
+     */
+    void buyCredits();
+
+    /**
+     * @brief Показать сообщение активации промокода
+     */
+    void showPromocodeActivationMessage(const QString& _message);
+
+    /**
+     * @brief Задать ошибку промокода
+     */
+    void setPromocodeError(const QString& _error);
 
 signals:
     //
@@ -111,37 +101,12 @@ signals:
     /**
      * @brief Email для авторизации был введён пользователем
      */
-    void emailEntered(const QString& _email);
+    void askConfirmationCodeRequested(const QString& _email);
 
     /**
-     * @brief Пользователь хочет восстановить пароль
+     * @brief Код проверки авторизации был введён пользователем
      */
-    void restorePasswordRequested(const QString& _email);
-
-    /**
-     * @brief Введён код подтверждения восстановления пароля
-     */
-    void passwordRestoringConfirmationCodeEntered(const QString& email, const QString& _code);
-
-    /**
-     * @brief Пользователь хочет сменить пароль
-     */
-    void changePasswordRequested(const QString& _email, const QString& _code, const QString& _password);
-
-    /**
-     * @brief Пользователь хочет зарегистрироваться
-     */
-    void registrationRequested(const QString& _email, const QString& _password);
-
-    /**
-     * @brief Введён код подтверждения регистрации
-     */
-    void registrationConfirmationCodeEntered(const QString& email, const QString& _code);
-
-    /**
-     * @brief Пользователь хочет авторизоваться
-     */
-    void loginRequested(const QString& _email, const QString& _password);
+    void checkConfirmationCodeRequested(const QString& _code);
 
     //
     // Отображение/скрытие личного кабинета
@@ -158,17 +123,26 @@ signals:
     void closeAccountRequested();
 
     //
-    // Оплата услуг
+    // Работа с аккаунтом
     //
 
     /**
-     * @brief Пользователь хочет продлить подписку на облако
+     * @brief Запросить информацию об аккаунте
      */
-    void renewSubscriptionRequested(int _month, int _paymentType);
+    void askAccountInfoRequested();
 
-    //
-    // Работа с аккаунтом
-    //
+    /**
+     * @brief Пользователь хочет обновить информацию об аккаунте
+     */
+    void updateAccountInfoRequested(const QString& _email, const QString& _name,
+                                    const QString& _description,
+                                    const QString& _subscriptionLanguage, bool _subscribed,
+                                    const QByteArray& _avatar);
+
+    /**
+     * @brief Пользователь хочет завершить заданную сессию
+     */
+    void terminateSessionRequested(const QString& _sessionKey);
 
     /**
      * @brief Пользователь хочет выйти из аккаунта
@@ -176,39 +150,14 @@ signals:
     void logoutRequested();
 
     /**
-     * @brief Пользователь хочет сменить имя пользователя
+     * @brief Пользователь хочет применить заданную опцию оплаты
      */
-    void changeUserNameRequested(const QString& _userName);
+    void activatePaymentOptionRequested(const Domain::PaymentOption& _paymentOption);
 
     /**
-     * @brief Пользователь хочет отключить/включить получение уведомлений по почте
+     * @brief Пользователь хочет активировать промокод
      */
-    void changeReceiveEmailNotificationsRequested(bool _receive);
-
-    /**
-     * @brief Пользователь хочет сменить аватар
-     */
-    void changeAvatarRequested(const QByteArray& _avatar);
-
-    //
-    // Информирование о параметрах аккаунта
-    //
-
-    /**
-     * @brief Изменилась возможность создания проектов в облаке
-     * @param _authorized - авторизован ли пользователь
-     * @param _ableToCreate - может ли пользователь создавать новые проекты (активна ли подписка)
-     */
-    void cloudProjectsCreationAvailabilityChanged(bool _authorized, bool _ableToCreate);
-
-private:
-    /**
-     * @brief Настроить соединения зависящие от действий пользователя в интерфейсе
-     */
-    void initAccountBarConnections();
-    void initToolBarConnections();
-    void initNavigatorConnections();
-    void initViewConnections();
+    void activatePromocodeRequested(const QString& _promocode);
 
 private:
     class Implementation;

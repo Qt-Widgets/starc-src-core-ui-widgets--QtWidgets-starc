@@ -20,9 +20,14 @@ public:
     void setFixed(bool fixed);
 
     /**
+     * @brief Количество вкладок
+     */
+    int count() const;
+
+    /**
      * @brief Добавить вкладку с заданным названием
      */
-    void addTab(const QString& _tabName);
+    void addTab(const QString& _tabName, const QString& _tabIcon = {}, const QColor& _color = {});
 
     /**
      * @brief Задать название вкладки
@@ -43,6 +48,21 @@ public:
      * @brief Получить текущую вкладку
      */
     int currentTab() const;
+
+    /**
+     * @brief Получить индекс таба в заданной позиции
+     */
+    int tabAt(const QPointF& _position) const;
+
+    /**
+     * @brief Удалить вкладку
+     */
+    void removeTab(int _tabIndex);
+
+    /**
+     * @brief rУдалить все вкладки
+     */
+    void removeAllTabs();
 
     /**
      * @brief Вычисляем идеальный размер в зависимости от контента
@@ -75,12 +95,36 @@ protected:
     void paintEvent(QPaintEvent* _event) override;
 
     /**
+     * @brief Обновляем виджет для корректного отображения ховер элемента
+     */
+#if (QT_VERSION > QT_VERSION_CHECK(6, 0, 0))
+    void enterEvent(QEnterEvent* _event) override;
+#else
+    void enterEvent(QEvent* _event) override;
+#endif
+    void leaveEvent(QEvent* _event) override;
+
+    /**
+     * @brief Обновление отрисовки при смене элемента на который наведена мышь
+     */
+    void mouseMoveEvent(QMouseEvent* _event) override;
+
+    /**
+     * @brief Запускаем анимацию клика на табе
+     */
+    void mousePressEvent(QMouseEvent* _event) override;
+
+    /**
      * @brief Смена активной вкладки при клике мышкой
      */
     void mouseReleaseEvent(QMouseEvent* _event) override;
+
+    /**
+     * @brief При возможности прокручиваем табы
+     */
+    void wheelEvent(QWheelEvent* _event) override;
 
 private:
     class Implementation;
     QScopedPointer<Implementation> d;
 };
-

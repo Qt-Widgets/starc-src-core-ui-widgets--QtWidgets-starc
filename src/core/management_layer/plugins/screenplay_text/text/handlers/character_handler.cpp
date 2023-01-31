@@ -7,50 +7,36 @@
 #include <business_layer/model/screenplay/screenplay_dictionaries_model.h>
 #include <business_layer/model/screenplay/text/screenplay_text_block_parser.h>
 #include <business_layer/templates/screenplay_template.h>
-
 #include <data_layer/storage/document_storage.h>
 #include <data_layer/storage/storage_facade.h>
-
 #include <domain/document_object.h>
 
 #include <QKeyEvent>
-#include <QStringListModel>
 #include <QStringList>
+#include <QStringListModel>
 #include <QTextBlock>
 #include <QTimer>
 
-using BusinessLayer::CharacterParser;
-using BusinessLayer::SceneCharactersParser;
-using BusinessLayer::ScreenplayBlockStyle;
-using BusinessLayer::ScreenplayParagraphType;
+using BusinessLayer::ScreenplayCharacterParser;
+using BusinessLayer::ScreenplaySceneCharactersParser;
+using BusinessLayer::TextBlockStyle;
+using BusinessLayer::TextParagraphType;
 using Ui::ScreenplayTextEdit;
 
 
-namespace KeyProcessingLayer
-{
+namespace KeyProcessingLayer {
 
 CharacterHandler::CharacterHandler(ScreenplayTextEdit* _editor)
-    : StandardKeyHandler(_editor),
-      m_completerModel(new QStringListModel(_editor))
+    : StandardKeyHandler(_editor)
+    , m_completerModel(new QStringListModel(_editor))
 {
 }
 
 void CharacterHandler::prehandle()
 {
-    //
-    // Получим необходимые значения
-    //
-    // ... курсор в текущем положении
-    QTextCursor cursor = editor()->textCursor();
-    // ... блок текста в котором находится курсор
-    QTextBlock currentBlock = cursor.block();
-    // ... текст блока
-    QString currentBlockText = currentBlock.text().trimmed();
-    // ... текст до курсора
-    QString cursorBackwardText = currentBlockText.left(cursor.positionInBlock());
-
-    complete(currentBlockText, cursorBackwardText);
+    handleOther();
 }
+
 void CharacterHandler::handleEnter(QKeyEvent* _event)
 {
     //
@@ -67,7 +53,8 @@ void CharacterHandler::handleEnter(QKeyEvent* _event)
     // ... текст после курсора
     QString cursorForwardText = currentBlockText.mid(cursor.positionInBlock());
     // ... текущая секция
-    CharacterParser::Section currentSection = CharacterParser::section(cursorBackwardText);
+    ScreenplayCharacterParser::Section currentSection
+        = ScreenplayCharacterParser::section(cursorBackwardText);
 
 
     //
@@ -90,24 +77,24 @@ void CharacterHandler::handleEnter(QKeyEvent* _event)
         // Дописать необходимые символы
         //
         switch (currentSection) {
-            case CharacterParser::SectionState: {
-                cursor.insertText(")");
-                break;
-            }
+        case ScreenplayCharacterParser::SectionExtension: {
+            cursor.insertText(")");
+            break;
+        }
 
-            default: {
-                break;
-            }
+        default: {
+            break;
+        }
         }
 
         //
         // Если нужно автоматически перепрыгиваем к следующему блоку
         //
         if (_event != 0 // ... чтобы таб не переводил на новую строку
-            && currentSection == CharacterParser::SectionName) {
+            && currentSection == ScreenplayCharacterParser::SectionName) {
             cursor.movePosition(QTextCursor::EndOfBlock);
             editor()->setTextCursor(cursor);
-            editor()->addParagraph(jumpForEnter(ScreenplayParagraphType::Character));
+            editor()->addParagraph(jumpForEnter(TextParagraphType::Character));
         }
     } else {
         //! Подстановщик закрыт
@@ -118,18 +105,17 @@ void CharacterHandler::handleEnter(QKeyEvent* _event)
             //
             // Удаляем всё, но оставляем стилем блока текущий
             //
-            editor()->addParagraph(ScreenplayParagraphType::Character);
+            editor()->addParagraph(TextParagraphType::Character);
         } else {
             //! Нет выделения
 
-            if (cursorBackwardText.isEmpty()
-                && cursorForwardText.isEmpty()) {
+            if (cursorBackwardText.isEmpty() && cursorForwardText.isEmpty()) {
                 //! Текст пуст
 
                 //
                 // Cменить стиль
                 //
-                editor()->setCurrentParagraphType(changeForEnter(ScreenplayParagraphType::Character));
+                editor()->setCurrentParagraphType(changeForEnter(TextParagraphType::Character));
             } else {
                 //! Текст не пуст
 
@@ -144,21 +130,21 @@ void CharacterHandler::handleEnter(QKeyEvent* _event)
                     //
                     // Вставим блок имени героя перед собой
                     //
-                    editor()->addParagraph(ScreenplayParagraphType::Character);
+                    editor()->addParagraph(TextParagraphType::Character);
                 } else if (cursorForwardText.isEmpty()) {
                     //! В конце блока
 
                     //
                     // Вставить блок реплики героя
                     //
-                    editor()->addParagraph(jumpForEnter(ScreenplayParagraphType::Character));
+                    editor()->addParagraph(jumpForEnter(TextParagraphType::Character));
                 } else {
                     //! Внутри блока
 
                     //
                     // Вставить блок реплики героя
                     //
-                    editor()->addParagraph(ScreenplayParagraphType::Dialogue);
+                    editor()->addParagraph(TextParagraphType::Dialogue);
                 }
             }
         }
@@ -202,14 +188,13 @@ void CharacterHandler::handleTab(QKeyEvent*)
         } else {
             //! Нет выделения
 
-            if (cursorBackwardText.isEmpty()
-                && cursorForwardText.isEmpty()) {
+            if (cursorBackwardText.isEmpty() && cursorForwardText.isEmpty()) {
                 //! Текст пуст
 
                 //
                 // Cменить стиль на описание действия
                 //
-                editor()->setCurrentParagraphType(changeForTab(ScreenplayParagraphType::Character));
+                editor()->setCurrentParagraphType(changeForTab(TextParagraphType::Character));
             } else {
                 //! Текст не пуст
 
@@ -230,7 +215,7 @@ void CharacterHandler::handleTab(QKeyEvent*)
                     //
                     // Вставить блок ремарки
                     //
-                    editor()->addParagraph(jumpForTab(ScreenplayParagraphType::Character));
+                    editor()->addParagraph(jumpForTab(TextParagraphType::Character));
                 } else {
                     //! Внутри блока
 
@@ -241,6 +226,20 @@ void CharacterHandler::handleTab(QKeyEvent*)
             }
         }
     }
+}
+
+void CharacterHandler::handleBackspace(QKeyEvent* _event)
+{
+    //
+    // Блокируем отображение подсказки при удалении текущего блока
+    //
+    if (editor()->textCursor().positionInBlock() == 0 && !editor()->textCursor().hasSelection()) {
+        m_completionAllowed = false;
+    }
+
+    StandardKeyHandler::handleBackspace(_event);
+
+    m_completionAllowed = true;
 }
 
 void CharacterHandler::handleOther(QKeyEvent*)
@@ -284,8 +283,17 @@ void CharacterHandler::handleInput(QInputMethodEvent*)
     complete(currentBlockText, cursorBackwardText);
 }
 
-void CharacterHandler::complete(const QString& _currentBlockText, const QString& _cursorBackwardText)
+void CharacterHandler::complete(const QString& _currentBlockText,
+                                const QString& _cursorBackwardText)
 {
+    if (!m_completionAllowed) {
+        return;
+    }
+
+    if (_currentBlockText.isEmpty() && !editor()->showSuggestionsInEmptyBlocks()) {
+        return;
+    }
+
     //
     // Получим модель подсказок для текущей секции и выведем пользователю
     //
@@ -296,87 +304,96 @@ void CharacterHandler::complete(const QString& _currentBlockText, const QString&
     QString sectionText;
 
     QTextCursor cursor = editor()->textCursor();
-    switch (CharacterParser::section(_cursorBackwardText)) {
-        case CharacterParser::SectionName: {
-            QStringList charactersToComplete;
-            //
-            // Определим персонажей сцены
-            //
+    switch (ScreenplayCharacterParser::section(_cursorBackwardText)) {
+    case ScreenplayCharacterParser::SectionName: {
+        QStringList charactersToComplete;
+        //
+        // Определим персонажей сцены
+        //
+        cursor.movePosition(QTextCursor::PreviousBlock);
+        while (!cursor.atStart()
+               && TextBlockStyle::forBlock(cursor.block()) != TextParagraphType::SceneHeading) {
+            if (TextBlockStyle::forBlock(cursor.block()) == TextParagraphType::Character) {
+                const QString characterName
+                    = ScreenplayCharacterParser::name(cursor.block().text());
+                if (!characterName.isEmpty() && !charactersToComplete.contains(characterName)) {
+                    //
+                    // Персонажа, который говорил встречный диалог ставим выше,
+                    // т.к. высока вероятность того, что они общаются
+                    //
+                    if (charactersToComplete.size() == 1) {
+                        charactersToComplete.prepend(characterName);
+                    }
+                    //
+                    // Остальных персонажей наполняем просто по очереди в тексте
+                    //
+                    else {
+                        charactersToComplete.append(characterName);
+                    }
+                }
+            } else if (TextBlockStyle::forBlock(cursor.block())
+                       == TextParagraphType::SceneCharacters) {
+                const QStringList characters
+                    = ScreenplaySceneCharactersParser::characters(cursor.block().text());
+                for (const QString& characterName : characters) {
+                    if (!charactersToComplete.contains(characterName)) {
+                        charactersToComplete.append(characterName);
+                    }
+                }
+            }
             cursor.movePosition(QTextCursor::PreviousBlock);
-            while (!cursor.atStart()
-                   && ScreenplayBlockStyle::forBlock(cursor.block()) != ScreenplayParagraphType::SceneHeading) {
-                if (ScreenplayBlockStyle::forBlock(cursor.block()) == ScreenplayParagraphType::Character) {
-                    const QString characterName = CharacterParser::name(cursor.block().text());
-                    if (!characterName.isEmpty() && !charactersToComplete.contains(characterName)) {
-                        //
-                        // Персонажа, который говорил встречный диалог ставим выше,
-                        // т.к. высока вероятность того, что они общаются
-                        //
-                        if (charactersToComplete.size() == 1) {
-                            charactersToComplete.prepend(characterName);
-                        }
-                        //
-                        // Остальных персонажей наполняем просто по очереди в тексте
-                        //
-                        else {
-                            charactersToComplete.append(characterName);
-                        }
-                    }
-                } else if (ScreenplayBlockStyle::forBlock(cursor.block()) == ScreenplayParagraphType::SceneCharacters) {
-                    const QStringList characters = SceneCharactersParser::characters(cursor.block().text());
-                    for (const QString& characterName : characters) {
-                        if (!charactersToComplete.contains(characterName)) {
-                            charactersToComplete.append(characterName);
-                        }
-                    }
-                }
-                cursor.movePosition(QTextCursor::PreviousBlock);
-                cursor.movePosition(QTextCursor::StartOfBlock);
+            cursor.movePosition(QTextCursor::StartOfBlock);
+        }
+
+        //
+        // Все остальные персонажи
+        //
+        for (int characterRow = 0; characterRow < editor()->characters()->rowCount();
+             ++characterRow) {
+            const auto characterIndex = editor()->characters()->index(characterRow, 0);
+            const auto characterName
+                = editor()->characters()->data(characterIndex, Qt::DisplayRole).toString();
+            if (!charactersToComplete.contains(characterName)) {
+                charactersToComplete.append(characterName);
             }
-
-            //
-            // Все остальные персонажи
-            //
-            for (int characterRow = 0; characterRow < editor()->characters()->rowCount(); ++characterRow) {
-                const auto characterIndex = editor()->characters()->index(characterRow, 0);
-                const auto characterName = editor()->characters()->data(characterIndex, Qt::DisplayRole).toString();
-                if (!charactersToComplete.contains(characterName)) {
-                    charactersToComplete.append(characterName);
-                }
-            }
-
-            m_completerModel->setStringList(charactersToComplete);
-            sectionModel = m_completerModel;
-            sectionText = CharacterParser::name(_currentBlockText);
-            break;
         }
 
-        case CharacterParser::SectionState: {
-            m_completerModel->setStringList(editor()->dictionaries()->characterExtensions().toList());
-            sectionModel = m_completerModel;
-            sectionText = CharacterParser::extension(_currentBlockText);
-            break;
-        }
+        m_completerModel->setStringList(charactersToComplete);
+        sectionModel = m_completerModel;
+        sectionText = ScreenplayCharacterParser::name(_currentBlockText);
+        break;
+    }
 
-        default: {
-            break;
-        }
+    case ScreenplayCharacterParser::SectionExtension: {
+        m_completerModel->setStringList(editor()->dictionaries()->characterExtensions().toList());
+        sectionModel = m_completerModel;
+        sectionText = ScreenplayCharacterParser::extension(_currentBlockText);
+        break;
+    }
+
+    default: {
+        break;
+    }
     }
 
     //
     // Дополним текст
     //
     int cursorMovement = sectionText.length();
-    while (!_cursorBackwardText.endsWith(sectionText.left(cursorMovement), Qt::CaseInsensitive)) {
+    while (
+        !_cursorBackwardText.endsWith(sectionText.leftRef(cursorMovement), Qt::CaseInsensitive)) {
         --cursorMovement;
     }
     //
     // ... дополняем, когда цикл обработки событий выполнится, чтобы позиция курсора
     //     корректно определилась после изменения текста
     //
-    QTimer::singleShot(0, [this, sectionModel, sectionText, cursorMovement] {
-        editor()->complete(sectionModel, sectionText, cursorMovement);
-    });
+    QMetaObject::invokeMethod(
+        editor(),
+        [this, sectionModel, sectionText, cursorMovement] {
+            editor()->complete(sectionModel, sectionText, cursorMovement);
+        },
+        Qt::QueuedConnection);
 }
 
 void CharacterHandler::storeCharacter() const
@@ -393,14 +410,14 @@ void CharacterHandler::storeCharacter() const
     // ... текст до курсора
     const QString cursorBackwardText = currentBlockText.left(cursor.positionInBlock());
     // ... имя персонажа
-    const QString characterName = CharacterParser::name(cursorBackwardText);
+    const QString characterName = ScreenplayCharacterParser::name(cursorBackwardText);
     // ... состояние персонажа
-    const QString characterExtension = CharacterParser::extension(cursorBackwardText);
+    const QString characterExtension = ScreenplayCharacterParser::extension(cursorBackwardText);
 
     //
     // Сохраняем персонажа
     //
-    editor()->characters()->createCharacter(characterName);
+    editor()->createCharacter(characterName);
     editor()->dictionaries()->addCharacterExtension(characterExtension);
 }
 

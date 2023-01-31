@@ -22,12 +22,17 @@ public:
     /**
      * @brief Задать текст
      */
-    void setText(const QString& _text);
+    virtual void setText(const QString& _text);
 
     /**
      * @brief Задать выравнивание текста
      */
     void setAlignment(Qt::Alignment _alignment);
+
+    /**
+     * @brief Возможность кликнуть на лейбле
+     */
+    void setClickable(bool _clickable);
 
     /**
      * @brief Переопределяем для корректного подсчёта размера в компоновщиках
@@ -155,6 +160,19 @@ protected:
 
 
 /**
+ * @brief Текстовая метка со шрифтом button
+ */
+class CORE_LIBRARY_EXPORT ButtonLabel : public AbstractLabel
+{
+public:
+    explicit ButtonLabel(QWidget* _parent = nullptr);
+
+protected:
+    const QFont& textFont() const override;
+};
+
+
+/**
  * @brief Текстовая метка со шрифтом caption
  */
 class CORE_LIBRARY_EXPORT CaptionLabel : public AbstractLabel
@@ -179,15 +197,149 @@ protected:
     const QFont& textFont() const override;
 };
 
+class CORE_LIBRARY_EXPORT AbstractIconsLabel : public AbstractLabel
+{
+public:
+    explicit AbstractIconsLabel(QWidget* _parent = nullptr);
+
+    /**
+     * @brief Установить иконку
+     */
+    void setIcon(const QString& _icon);
+
+protected:
+    /**
+     * @brief Корректируем иконку при смене направления расположения текста
+     */
+    bool event(QEvent* _event) override;
+
+private:
+    /**
+     * @brief Закрываем метод, чтобы клиенты не могли использовать неверный способ задания иконки
+     */
+    void setText(const QString& _text) override;
+
+    /**
+     * @brief Исходная иконка
+     */
+    QString m_icon;
+};
+
+
+/**
+ * @brief Текстовая метка со шрифтом iconSmall
+ */
+class CORE_LIBRARY_EXPORT IconsSmallLabel : public AbstractIconsLabel
+{
+public:
+    explicit IconsSmallLabel(QWidget* _parent = nullptr);
+
+protected:
+    const QFont& textFont() const override;
+};
+
 
 /**
  * @brief Текстовая метка со шрифтом iconMid
  */
-class CORE_LIBRARY_EXPORT IconsMidLabel : public AbstractLabel
+class CORE_LIBRARY_EXPORT IconsMidLabel : public AbstractIconsLabel
 {
 public:
     explicit IconsMidLabel(QWidget* _parent = nullptr);
 
+    /**
+     * @brief Необходимо ли рисовать декорацию
+     */
+    void setDecorationVisible(bool _visible);
+
+    /**
+     * @brief Учитываем размер декорации при определении идеального размера
+     */
+    QSize sizeHint() const override;
+    int heightForWidth(int _width) const override;
+
 protected:
+    /**
+     * @brief Необходимый шрифт для отрисовки лейбла
+     */
     const QFont& textFont() const override;
+
+    /**
+     * @brief Сначала рисуем декорацию, а потом иконку
+     */
+    void paintEvent(QPaintEvent* _event) override;
+
+private:
+    /**
+     * @brief Необходимо ли отображать декорацию
+     */
+    bool m_isDecorationVisible = false;
+};
+
+
+/**
+ * @brief Текстовая метка со шрифтом iconBig
+ */
+class CORE_LIBRARY_EXPORT IconsBigLabel : public AbstractIconsLabel
+{
+public:
+    explicit IconsBigLabel(QWidget* _parent = nullptr);
+
+    /**
+     * @brief Необходимо ли рисовать декорацию
+     */
+    void setDecorationVisible(bool _visible);
+
+    /**
+     * @brief Учитываем размер декорации при определении идеального размера
+     */
+    QSize sizeHint() const override;
+    int heightForWidth(int _width) const override;
+
+protected:
+    /**
+     * @brief Необходимый шрифт для отрисовки лейбла
+     */
+    const QFont& textFont() const override;
+
+    /**
+     * @brief Сначала рисуем декорацию, а потом иконку
+     */
+    void paintEvent(QPaintEvent* _event) override;
+
+private:
+    /**
+     * @brief Необходимо ли отображать декорацию
+     */
+    bool m_isDecorationVisible = false;
+};
+
+/**
+ * @brief Виджет для отображения изображения
+ */
+class CORE_LIBRARY_EXPORT ImageLabel : public Widget
+{
+public:
+    explicit ImageLabel(QWidget* _parent = nullptr);
+    ~ImageLabel() override;
+
+    /**
+     * @brief Задать изображение для отрисовки
+     */
+    void setImage(const QPixmap& _image);
+
+protected:
+    /**
+     * @brief Реализуем собственную отрисовку
+     */
+    void paintEvent(QPaintEvent* _event) override;
+
+    /**
+     * @brief Обновляем закешированную картинку, чтобы она соответствовала актуальному размеру
+     */
+    void resizeEvent(QResizeEvent* _event) override;
+
+private:
+    class Implementation;
+    QScopedPointer<Implementation> d;
 };

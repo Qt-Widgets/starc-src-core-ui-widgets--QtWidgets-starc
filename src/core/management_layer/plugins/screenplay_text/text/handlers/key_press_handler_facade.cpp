@@ -1,10 +1,11 @@
 #include "key_press_handler_facade.h"
 
+#include "../screenplay_text_edit.h"
+#include "act_footer_handler.h"
+#include "act_heading_handler.h"
 #include "action_handler.h"
 #include "character_handler.h"
 #include "dialog_handler.h"
-#include "folder_header_handler.h"
-#include "folder_footer_handler.h"
 #include "inline_note_handler.h"
 #include "lyrics_handler.h"
 #include "parenthetical_handler.h"
@@ -12,64 +13,70 @@
 #include "prepare_handler.h"
 #include "scene_characters_handler.h"
 #include "scene_heading_handler.h"
+#include "sequence_footer_handler.h"
+#include "sequence_heading_handler.h"
 #include "shot_handler.h"
+#include "splitter_handler.h"
 #include "transition_handler.h"
 #include "unformatted_text_handler.h"
 
-#include "../screenplay_text_edit.h"
-
 #include <business_layer/templates/screenplay_template.h>
 
-#include <QTextBlock>
 #include <QKeyEvent>
+#include <QTextBlock>
 
-using BusinessLayer::ScreenplayParagraphType;
+using BusinessLayer::TextParagraphType;
 using Ui::ScreenplayTextEdit;
 
-namespace KeyProcessingLayer
-{
+namespace KeyProcessingLayer {
 
 class KeyPressHandlerFacade::Implementation
 {
 public:
     explicit Implementation(ScreenplayTextEdit* _editor);
 
-    Ui::ScreenplayTextEdit* m_editor = nullptr;
+    Ui::ScreenplayTextEdit* editor = nullptr;
 
-    QScopedPointer<PrepareHandler> m_prepareHandler;
-    QScopedPointer<PreHandler> m_preHandler;
-    QScopedPointer<UnformattedTextHandler> m_unformattedTextHandler;
-    QScopedPointer<SceneHeadingHandler> m_sceneHeaderHandler;
-    QScopedPointer<SceneCharactersHandler> m_sceneCharactersHandler;
-    QScopedPointer<ActionHandler> m_actionHandler;
-    QScopedPointer<CharacterHandler> m_characterHandler;
-    QScopedPointer<ParentheticalHandler> m_parentheticalHandler;
-    QScopedPointer<DialogHandler> m_dialogHandler;
-    QScopedPointer<LyricsHandler> m_lyricsHandler;
-    QScopedPointer<TransitionHandler> m_transitionHandler;
-    QScopedPointer<ShotHandler> m_shotHandler;
-    QScopedPointer<InlineNoteHandler> m_inlineNoteHandler;
-    QScopedPointer<FolderHeaderHandler> m_folderHeaderHandler;
-    QScopedPointer<FolderFooterHandler> m_folderFooterHandler;
+    QScopedPointer<PrepareHandler> prepareHandler;
+    QScopedPointer<PreHandler> preHandler;
+    QScopedPointer<UnformattedTextHandler> unformattedTextHandler;
+    QScopedPointer<SceneHeadingHandler> sceneHeaderHandler;
+    QScopedPointer<SceneCharactersHandler> sceneCharactersHandler;
+    QScopedPointer<ActionHandler> actionHandler;
+    QScopedPointer<CharacterHandler> characterHandler;
+    QScopedPointer<ParentheticalHandler> parentheticalHandler;
+    QScopedPointer<DialogHandler> dialogHandler;
+    QScopedPointer<LyricsHandler> lyricsHandler;
+    QScopedPointer<TransitionHandler> transitionHandler;
+    QScopedPointer<ShotHandler> shotHandler;
+    QScopedPointer<InlineNoteHandler> inlineNoteHandler;
+    QScopedPointer<SequenceHeadingHandler> sequenceHeadingHandler;
+    QScopedPointer<SequenceFooterHandler> sequenceFooterHandler;
+    QScopedPointer<ActHeadingHandler> actHeadingHandler;
+    QScopedPointer<ActFooterHandler> actFooterHandler;
+    QScopedPointer<SplitterHandler> splitterHandler;
 };
 
 KeyPressHandlerFacade::Implementation::Implementation(Ui::ScreenplayTextEdit* _editor)
-    : m_editor(_editor),
-      m_prepareHandler(new PrepareHandler(_editor)),
-      m_preHandler(new PreHandler(_editor)),
-      m_unformattedTextHandler(new UnformattedTextHandler(_editor)),
-      m_sceneHeaderHandler(new SceneHeadingHandler(_editor)),
-      m_sceneCharactersHandler(new SceneCharactersHandler(_editor)),
-      m_actionHandler(new ActionHandler(_editor)),
-      m_characterHandler(new CharacterHandler(_editor)),
-      m_parentheticalHandler(new ParentheticalHandler(_editor)),
-      m_dialogHandler(new DialogHandler(_editor)),
-      m_lyricsHandler(new LyricsHandler(_editor)),
-      m_transitionHandler(new TransitionHandler(_editor)),
-      m_shotHandler(new ShotHandler(_editor)),
-      m_inlineNoteHandler(new InlineNoteHandler(_editor)),
-      m_folderHeaderHandler(new FolderHeaderHandler(_editor)),
-      m_folderFooterHandler(new FolderFooterHandler(_editor))
+    : editor(_editor)
+    , prepareHandler(new PrepareHandler(_editor))
+    , preHandler(new PreHandler(_editor))
+    , unformattedTextHandler(new UnformattedTextHandler(_editor))
+    , sceneHeaderHandler(new SceneHeadingHandler(_editor))
+    , sceneCharactersHandler(new SceneCharactersHandler(_editor))
+    , actionHandler(new ActionHandler(_editor))
+    , characterHandler(new CharacterHandler(_editor))
+    , parentheticalHandler(new ParentheticalHandler(_editor))
+    , dialogHandler(new DialogHandler(_editor))
+    , lyricsHandler(new LyricsHandler(_editor))
+    , transitionHandler(new TransitionHandler(_editor))
+    , shotHandler(new ShotHandler(_editor))
+    , inlineNoteHandler(new InlineNoteHandler(_editor))
+    , sequenceHeadingHandler(new SequenceHeadingHandler(_editor))
+    , sequenceFooterHandler(new SequenceFooterHandler(_editor))
+    , actHeadingHandler(new ActHeadingHandler(_editor))
+    , actFooterHandler(new ActFooterHandler(_editor))
+    , splitterHandler(new SplitterHandler(_editor))
 {
 }
 
@@ -91,12 +98,12 @@ KeyPressHandlerFacade::~KeyPressHandlerFacade() = default;
 
 void KeyPressHandlerFacade::prepare(QKeyEvent* _event)
 {
-    d->m_prepareHandler->handle(_event);
+    d->prepareHandler->handle(_event);
 }
 
 void KeyPressHandlerFacade::prepareForHandle(QKeyEvent* _event)
 {
-    d->m_preHandler->handle(_event);
+    d->preHandler->handle(_event);
 }
 
 void KeyPressHandlerFacade::prehandle()
@@ -107,8 +114,8 @@ void KeyPressHandlerFacade::prehandle()
 
 void KeyPressHandlerFacade::handle(QEvent* _event, bool _pre)
 {
-    QTextBlock currentBlock = d->m_editor->textCursor().block();
-    const auto currentType = BusinessLayer::ScreenplayBlockStyle::forBlock(currentBlock);
+    QTextBlock currentBlock = d->editor->textCursor().block();
+    const auto currentType = BusinessLayer::TextBlockStyle::forBlock(currentBlock);
     auto currentHandler = handlerFor(currentType);
 
     if (currentHandler == nullptr) {
@@ -124,17 +131,17 @@ void KeyPressHandlerFacade::handle(QEvent* _event, bool _pre)
 
 bool KeyPressHandlerFacade::needSendEventToBaseClass() const
 {
-    return d->m_prepareHandler->needSendEventToBaseClass();
+    return d->prepareHandler->needSendEventToBaseClass();
 }
 
 bool KeyPressHandlerFacade::needEnsureCursorVisible() const
 {
-    return d->m_prepareHandler->needEnsureCursorVisible();
+    return d->prepareHandler->needEnsureCursorVisible();
 }
 
 bool KeyPressHandlerFacade::needPrehandle() const
 {
-    return d->m_prepareHandler->needPrehandle();
+    return d->prepareHandler->needPrehandle();
 }
 
 KeyPressHandlerFacade::KeyPressHandlerFacade(ScreenplayTextEdit* _editor)
@@ -142,64 +149,76 @@ KeyPressHandlerFacade::KeyPressHandlerFacade(ScreenplayTextEdit* _editor)
 {
 }
 
-AbstractKeyHandler* KeyPressHandlerFacade::handlerFor(ScreenplayParagraphType _type)
+AbstractKeyHandler* KeyPressHandlerFacade::handlerFor(TextParagraphType _type)
 {
     switch (_type) {
-        case ScreenplayParagraphType::UnformattedText: {
-            return d->m_unformattedTextHandler.data();
-        }
+    case TextParagraphType::UnformattedText: {
+        return d->unformattedTextHandler.data();
+    }
 
-        case ScreenplayParagraphType::SceneHeading: {
-            return d->m_sceneHeaderHandler.data();
-        }
+    case TextParagraphType::SceneHeading: {
+        return d->sceneHeaderHandler.data();
+    }
 
-        case ScreenplayParagraphType::SceneCharacters: {
-            return d->m_sceneCharactersHandler.data();
-        }
+    case TextParagraphType::SceneCharacters: {
+        return d->sceneCharactersHandler.data();
+    }
 
-        case ScreenplayParagraphType::Action: {
-            return d->m_actionHandler.data();
-        }
+    case TextParagraphType::Action: {
+        return d->actionHandler.data();
+    }
 
-        case ScreenplayParagraphType::Character: {
-            return d->m_characterHandler.data();
-        }
+    case TextParagraphType::Character: {
+        return d->characterHandler.data();
+    }
 
-        case ScreenplayParagraphType::Parenthetical: {
-            return d->m_parentheticalHandler.data();
-        }
+    case TextParagraphType::Parenthetical: {
+        return d->parentheticalHandler.data();
+    }
 
-        case ScreenplayParagraphType::Dialogue: {
-            return d->m_dialogHandler.data();
-        }
+    case TextParagraphType::Dialogue: {
+        return d->dialogHandler.data();
+    }
 
-        case ScreenplayParagraphType::Lyrics: {
-            return d->m_lyricsHandler.data();
-        }
+    case TextParagraphType::Lyrics: {
+        return d->lyricsHandler.data();
+    }
 
-        case ScreenplayParagraphType::Transition: {
-            return d->m_transitionHandler.data();
-        }
+    case TextParagraphType::Transition: {
+        return d->transitionHandler.data();
+    }
 
-        case ScreenplayParagraphType::Shot: {
-            return d->m_shotHandler.data();
-        }
+    case TextParagraphType::Shot: {
+        return d->shotHandler.data();
+    }
 
-        case ScreenplayParagraphType::InlineNote: {
-            return d->m_inlineNoteHandler.data();
-        }
+    case TextParagraphType::InlineNote: {
+        return d->inlineNoteHandler.data();
+    }
 
-        case ScreenplayParagraphType::FolderHeader: {
-            return d->m_folderHeaderHandler.data();
-        }
+    case TextParagraphType::SequenceHeading: {
+        return d->sequenceHeadingHandler.data();
+    }
 
-        case ScreenplayParagraphType::FolderFooter: {
-            return d->m_folderFooterHandler.data();
-        }
+    case TextParagraphType::SequenceFooter: {
+        return d->sequenceFooterHandler.data();
+    }
 
-        default: {
-            return nullptr;
-        }
+    case TextParagraphType::ActHeading: {
+        return d->actHeadingHandler.data();
+    }
+
+    case TextParagraphType::ActFooter: {
+        return d->actFooterHandler.data();
+    }
+
+    case TextParagraphType::PageSplitter: {
+        return d->splitterHandler.data();
+    }
+
+    default: {
+        return nullptr;
+    }
     }
 }
 

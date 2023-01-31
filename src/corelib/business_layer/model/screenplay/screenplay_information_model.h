@@ -3,8 +3,7 @@
 #include "../abstract_model.h"
 
 
-namespace BusinessLayer
-{
+namespace BusinessLayer {
 
 /**
  * @brief Модель информации о сценарии
@@ -20,7 +19,8 @@ public:
     const QString& name() const;
     void setName(const QString& _name);
     Q_SIGNAL void nameChanged(const QString& _name);
-    void setDocumentName(const QString &_name) override;
+    QString documentName() const override;
+    void setDocumentName(const QString& _name) override;
 
     const QString& tagline() const;
     void setTagline(const QString& _tagline);
@@ -66,13 +66,41 @@ public:
     void setPrintFooterOnTitlePage(bool _print);
     Q_SIGNAL void printFooterOnTitlePageChanged(bool _print);
 
-    const QString& scenesNumbersPrefix() const;
-    void setScenesNumbersPrefix(const QString& _prefix);
-    Q_SIGNAL void scenesNumbersPrefixChanged(const QString& _prefix);
+    const QString& scenesNumbersTemplate() const;
+    void setScenesNumbersTemplate(const QString& _template);
+    Q_SIGNAL void scenesNumbersTemplateChanged(const QString& _template);
 
     int scenesNumberingStartAt() const;
     void setScenesNumberingStartAt(int _startNumber);
     Q_SIGNAL void scenesNumberingStartAtChanged(int _startNumber);
+
+    bool isSceneNumbersLocked() const;
+    void setScenesNumbersLocked(bool _locked);
+    Q_SIGNAL void isSceneNumbersLockedChanged(bool _locked);
+
+    bool overrideCommonSettings() const;
+    void setOverrideCommonSettings(bool _override);
+    Q_SIGNAL void overrideCommonSettingsChanged(bool _override);
+
+    QString templateId() const;
+    void setTemplateId(const QString& _templateId);
+    Q_SIGNAL void templateIdChanged(const QString& _templateId);
+
+    bool showSceneNumbers() const;
+    void setShowSceneNumbers(bool _show);
+    Q_SIGNAL void showSceneNumbersChanged(bool _show);
+
+    bool showSceneNumbersOnLeft() const;
+    void setShowSceneNumbersOnLeft(bool _show);
+    Q_SIGNAL void showSceneNumbersOnLeftChanged(bool _show);
+
+    bool showSceneNumbersOnRight() const;
+    void setShowSceneNumbersOnRight(bool _show);
+    Q_SIGNAL void showSceneNumbersOnRightChanged(bool _show);
+
+    bool showDialoguesNumbers() const;
+    void setShowDialoguesNumbers(bool _show);
+    Q_SIGNAL void showDialoguesNumbersChanged(bool _show);
 
 protected:
     /**
@@ -82,6 +110,7 @@ protected:
     void initDocument() override;
     void clearDocument() override;
     QByteArray toXml() const override;
+    ChangeCursor applyPatch(const QByteArray& _patch) override;
     /** @} */
 
 private:

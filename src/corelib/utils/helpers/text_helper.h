@@ -1,14 +1,17 @@
 #pragma once
 
-#include <corelib_global.h>
-
 #include <QtGlobal>
+
+#include <corelib_global.h>
+#include <functional>
 
 class QChar;
 class QFont;
 class QFontMetricsF;
 class QRectF;
 class QString;
+class QTextCharFormat;
+class QTextCursor;
 
 
 /**
@@ -28,7 +31,6 @@ public:
      * @brief Определить правильную высоту строки для заданного шрифта
      */
     static qreal fineLineSpacing(const QFont& _font);
-    static qreal fineLineSpacing(const QFontMetricsF& _metrics);
 
     /**
      * Возвращает высоту текста
@@ -41,9 +43,15 @@ public:
     static qreal heightForWidth(const QString& _text, const QFont& _font, qreal _width);
 
     /**
+     * @brief Определить последнюю строку для текста в блоке заданной ширины
+     */
+    static QString lastLineText(const QString& _text, const QFont& _font, qreal _width);
+
+    /**
      * @brief Сформировать замноготоченный текст из исходного в рамках заданной области
      */
     static QString elidedText(const QString& _text, const QFont& _font, const QRectF& _rect);
+    static QString elidedText(const QString& _text, const QFont& _font, qreal _width);
 
     /**
      * @brief Преобразовать специфичные символы к html-виду
@@ -66,4 +74,20 @@ public:
      */
     static QString smartToLower(const QString& _text);
     static QChar smartToLower(const QChar& _char);
+
+    /**
+     * @brief Оформить текст как предложение (первая заглавная, остальные строчные)
+     */
+    static QString toSentenceCase(const QString& _text, bool _capitalizeEveryWord = false);
+
+    /**
+     * @brief Определить количество слов в тексте
+     */
+    static int wordsCount(const QString& _text);
+
+    /**
+     * @brief Применить заданный функтор форматирования для выделенного текста в курсоре
+     */
+    static void updateSelectionFormatting(
+        QTextCursor _cursor, std::function<QTextCharFormat(const QTextCharFormat&)> updateFormat);
 };

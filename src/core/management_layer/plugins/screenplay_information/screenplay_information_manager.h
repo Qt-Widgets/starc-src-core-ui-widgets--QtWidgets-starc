@@ -7,8 +7,7 @@
 #include <QObject>
 
 
-namespace ManagementLayer
-{
+namespace ManagementLayer {
 
 /**
  * @brief Менеджер информации о сценарии
@@ -27,9 +26,13 @@ public:
      * @brief Реализуем интерфейс менеджера документа
      */
     /** @{ */
-    void setModel(BusinessLayer::AbstractModel* _model) override;
-    QWidget* view() override;
-    QWidget* createView() override;
+    Ui::IDocumentView* view() override;
+    Ui::IDocumentView* view(BusinessLayer::AbstractModel* _model) override;
+    Ui::IDocumentView* secondaryView() override;
+    Ui::IDocumentView* secondaryView(BusinessLayer::AbstractModel* _model) override;
+    Ui::IDocumentView* createView(BusinessLayer::AbstractModel* _model) override;
+    void resetModels() override;
+    void setEditingMode(DocumentEditingMode _mode) override;
     /** @} */
 
 private:

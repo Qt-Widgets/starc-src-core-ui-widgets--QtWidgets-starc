@@ -1,36 +1,47 @@
 #include "screenplay_information_model.h"
 
 #include <business_layer/model/abstract_image_wrapper.h>
-
+#include <business_layer/model/abstract_model_xml.h>
+#include <business_layer/templates/screenplay_template.h>
+#include <business_layer/templates/templates_facade.h>
+#include <data_layer/storage/settings_storage.h>
+#include <data_layer/storage/storage_facade.h>
 #include <domain/document_object.h>
-
+#include <utils/diff_match_patch/diff_match_patch_controller.h>
 #include <utils/helpers/image_helper.h>
 #include <utils/helpers/text_helper.h>
+#include <utils/logging.h>
 
 #include <QDomDocument>
-#include <QPixmap>
 
 
-namespace BusinessLayer
-{
+namespace BusinessLayer {
 
 namespace {
-    const QString kDocumentKey = "document";
-    const QString kNameKey = "name";
-    const QString kTaglineKey = "tagline";
-    const QString kLoglineKey = "logline";
-    const QString kTitlePageVisibleKey = "title_page_visible";
-    const QString kSynopsisVisibleKey = "synopsis_visible";
-    const QString kTreatmentVisibleKey = "treatment_visible";
-    const QString kScreenplayTextVisibleKey = "screenplay_text_visible";
-    const QString kScreenplayStatisticsVisibleKey = "screenplay_statistics_visible";
-    const QString kHeaderKey = "header";
-    const QString kPrintHeaderOnTitlePageKey = "print_header_on_title";
-    const QString kFooterKey = "footer";
-    const QString kPrintFooterOnTitlePageKey = "print_footer_on_title";
-    const QString kScenesNumbersPrefixKey = "scenes_numbers_prefix";
-    const QString kScenesNumberingStartAtKey = "scenes_numbering_start_at";
-}
+const QLatin1String kDocumentKey("document");
+const QLatin1String kNameKey("name");
+const QLatin1String kTaglineKey("tagline");
+const QLatin1String kLoglineKey("logline");
+const QLatin1String kTitlePageVisibleKey("title_page_visible");
+const QLatin1String kSynopsisVisibleKey("synopsis_visible");
+const QLatin1String kTreatmentVisibleKey("treatment_visible");
+const QLatin1String kScreenplayTextVisibleKey("screenplay_text_visible");
+const QLatin1String kScreenplayStatisticsVisibleKey("screenplay_statistics_visible");
+const QLatin1String kHeaderKey("header");
+const QLatin1String kPrintHeaderOnTitlePageKey("print_header_on_title");
+const QLatin1String kFooterKey("footer");
+const QLatin1String kPrintFooterOnTitlePageKey("print_footer_on_title");
+const QLatin1String kScenesNumbersPrefixKey("scenes_numbers_prefix");
+const QLatin1String kScenesNumbersTemplateKey("scenes_numbers_template");
+const QLatin1String kScenesNumberingStartAtKey("scenes_numbering_start_at");
+const QLatin1String kIsScenesNumberingLockedKey("is_scenes_numbering_locked");
+const QLatin1String kOverrideSystemSettingsKey("override_system_settings");
+const QLatin1String kTemplateIdKey("template_id");
+const QLatin1String kShowSceneNumbersKey("show_scenes_numbers");
+const QLatin1String kShowSceneNumbersOnLeftKey("show_scenes_numbers_on_left");
+const QLatin1String kShowScenesNumbersOnRightKey("show_scenes_numbers_on_right");
+const QLatin1String kShowDialoguesNumbersKey("show_dialogues_numbers");
+} // namespace
 
 class ScreenplayInformationModel::Implementation
 {
@@ -44,11 +55,18 @@ public:
     bool screenplayTextVisible = true;
     bool screenplayStatisticsVisible = true;
     QString header;
-    bool printHeaderOnTitlePage = true;
+    bool printHeaderOnTitlePage = false;
     QString footer;
-    bool printFooterOnTitlePage = true;
-    QString scenesNumbersPrefix;
+    bool printFooterOnTitlePage = false;
+    QString scenesNumbersTemplate = "#.";
     int scenesNumberingStartAt = 1;
+    bool isScenesNumbersLocked = false;
+    bool overrideCommonSettings = false;
+    QString templateId;
+    bool showSceneNumbers = false;
+    bool showSceneNumbersOnLeft = false;
+    bool showSceneNumbersOnRight = false;
+    bool showDialoguesNumbers = false;
 };
 
 
@@ -56,25 +74,76 @@ public:
 
 
 ScreenplayInformationModel::ScreenplayInformationModel(QObject* _parent)
-    : AbstractModel({ kDocumentKey, kNameKey, kLoglineKey, kHeaderKey, kPrintHeaderOnTitlePageKey,
-                      kFooterKey, kPrintFooterOnTitlePageKey, kScenesNumbersPrefixKey,
-                      kScenesNumberingStartAtKey },
-                    _parent),
-      d(new Implementation)
+    : AbstractModel(
+        {
+            kDocumentKey,
+            kNameKey,
+            kTaglineKey,
+            kLoglineKey,
+            kTitlePageVisibleKey,
+            kSynopsisVisibleKey,
+            kTreatmentVisibleKey,
+            kScreenplayTextVisibleKey,
+            kScreenplayStatisticsVisibleKey,
+            kHeaderKey,
+            kPrintHeaderOnTitlePageKey,
+            kFooterKey,
+            kPrintFooterOnTitlePageKey,
+            kScenesNumbersTemplateKey,
+            kScenesNumberingStartAtKey,
+            kIsScenesNumberingLockedKey,
+            kOverrideSystemSettingsKey,
+            kTemplateIdKey,
+            kShowSceneNumbersKey,
+            kShowSceneNumbersOnLeftKey,
+            kShowScenesNumbersOnRightKey,
+            kShowDialoguesNumbersKey,
+        },
+        _parent)
+    , d(new Implementation)
 {
-    connect(this, &ScreenplayInformationModel::nameChanged, this, &ScreenplayInformationModel::updateDocumentContent);
-    connect(this, &ScreenplayInformationModel::loglineChanged, this, &ScreenplayInformationModel::updateDocumentContent);
-    connect(this, &ScreenplayInformationModel::titlePageVisibleChanged, this, &ScreenplayInformationModel::updateDocumentContent);
-    connect(this, &ScreenplayInformationModel::synopsisVisibleChanged, this, &ScreenplayInformationModel::updateDocumentContent);
-    connect(this, &ScreenplayInformationModel::treatmentVisibleChanged, this, &ScreenplayInformationModel::updateDocumentContent);
-    connect(this, &ScreenplayInformationModel::screenplayTextVisibleChanged, this, &ScreenplayInformationModel::updateDocumentContent);
-    connect(this, &ScreenplayInformationModel::screenplayStatisticsVisibleChanged, this, &ScreenplayInformationModel::updateDocumentContent);
-    connect(this, &ScreenplayInformationModel::headerChanged, this, &ScreenplayInformationModel::updateDocumentContent);
-    connect(this, &ScreenplayInformationModel::printHeaderOnTitlePageChanged, this, &ScreenplayInformationModel::updateDocumentContent);
-    connect(this, &ScreenplayInformationModel::footerChanged, this, &ScreenplayInformationModel::updateDocumentContent);
-    connect(this, &ScreenplayInformationModel::printFooterOnTitlePageChanged, this, &ScreenplayInformationModel::updateDocumentContent);
-    connect(this, &ScreenplayInformationModel::scenesNumbersPrefixChanged, this, &ScreenplayInformationModel::updateDocumentContent);
-    connect(this, &ScreenplayInformationModel::scenesNumberingStartAtChanged, this, &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::nameChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::taglineChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::loglineChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::titlePageVisibleChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::synopsisVisibleChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::treatmentVisibleChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::screenplayTextVisibleChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::screenplayStatisticsVisibleChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::headerChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::printHeaderOnTitlePageChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::footerChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::printFooterOnTitlePageChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::scenesNumbersTemplateChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::scenesNumberingStartAtChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::isSceneNumbersLockedChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::overrideCommonSettingsChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::templateIdChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::showSceneNumbersChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::showSceneNumbersOnLeftChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::showSceneNumbersOnRightChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
+    connect(this, &ScreenplayInformationModel::showDialoguesNumbersChanged, this,
+            &ScreenplayInformationModel::updateDocumentContent);
 }
 
 ScreenplayInformationModel::~ScreenplayInformationModel() = default;
@@ -93,6 +162,11 @@ void ScreenplayInformationModel::setName(const QString& _name)
     d->name = _name;
     emit nameChanged(d->name);
     emit documentNameChanged(d->name);
+}
+
+QString ScreenplayInformationModel::documentName() const
+{
+    return name();
 }
 
 void ScreenplayInformationModel::setDocumentName(const QString& _name)
@@ -265,19 +339,19 @@ void ScreenplayInformationModel::setPrintFooterOnTitlePage(bool _print)
     emit printFooterOnTitlePageChanged(d->printFooterOnTitlePage);
 }
 
-const QString& ScreenplayInformationModel::scenesNumbersPrefix() const
+const QString& ScreenplayInformationModel::scenesNumbersTemplate() const
 {
-    return d->scenesNumbersPrefix;
+    return d->scenesNumbersTemplate;
 }
 
-void ScreenplayInformationModel::setScenesNumbersPrefix(const QString& _prefix)
+void ScreenplayInformationModel::setScenesNumbersTemplate(const QString& _template)
 {
-    if (d->scenesNumbersPrefix == _prefix) {
+    if (d->scenesNumbersTemplate == _template) {
         return;
     }
 
-    d->scenesNumbersPrefix = _prefix;
-    emit scenesNumbersPrefixChanged(d->scenesNumbersPrefix);
+    d->scenesNumbersTemplate = _template;
+    emit scenesNumbersTemplateChanged(d->scenesNumbersTemplate);
 }
 
 int ScreenplayInformationModel::scenesNumberingStartAt() const
@@ -293,6 +367,150 @@ void ScreenplayInformationModel::setScenesNumberingStartAt(int _startNumber)
 
     d->scenesNumberingStartAt = _startNumber;
     emit scenesNumberingStartAtChanged(d->scenesNumberingStartAt);
+}
+
+bool ScreenplayInformationModel::isSceneNumbersLocked() const
+{
+    return d->isScenesNumbersLocked;
+}
+
+void ScreenplayInformationModel::setScenesNumbersLocked(bool _locked)
+{
+    //
+    // Тут поверх блокировки может прийти ещё одна блокировка, поэтому дополнительной проверки нет
+    //
+
+    d->isScenesNumbersLocked = _locked;
+    emit isSceneNumbersLockedChanged(_locked);
+}
+
+bool ScreenplayInformationModel::overrideCommonSettings() const
+{
+    return d->overrideCommonSettings;
+}
+
+void ScreenplayInformationModel::setOverrideCommonSettings(bool _override)
+{
+    if (d->overrideCommonSettings == _override) {
+        return;
+    }
+
+    d->overrideCommonSettings = _override;
+    emit overrideCommonSettingsChanged(d->overrideCommonSettings);
+
+    //
+    // При включении/выключении кастомных параметров, сбрасываем до стандартных
+    //
+    setTemplateId(TemplatesFacade::screenplayTemplate().id());
+    setShowSceneNumbers(
+        settingsValue(DataStorageLayer::kComponentsScreenplayEditorShowSceneNumbersKey).toBool());
+    setShowSceneNumbersOnLeft(
+        settingsValue(DataStorageLayer::kComponentsScreenplayEditorShowSceneNumbersOnLeftKey)
+            .toBool());
+    setShowSceneNumbersOnRight(
+        settingsValue(DataStorageLayer::kComponentsScreenplayEditorShowSceneNumbersOnRightKey)
+            .toBool());
+    setShowDialoguesNumbers(
+        settingsValue(DataStorageLayer::kComponentsScreenplayEditorShowDialogueNumbersKey)
+            .toBool());
+}
+
+QString ScreenplayInformationModel::templateId() const
+{
+    if (d->overrideCommonSettings) {
+        return d->templateId;
+    }
+
+    return TemplatesFacade::screenplayTemplate().id();
+}
+
+void ScreenplayInformationModel::setTemplateId(const QString& _templateId)
+{
+    if (d->templateId == _templateId) {
+        return;
+    }
+
+    d->templateId = _templateId;
+    emit templateIdChanged(d->templateId);
+}
+
+bool ScreenplayInformationModel::showSceneNumbers() const
+{
+    if (d->overrideCommonSettings) {
+        return d->showSceneNumbers;
+    }
+
+    return settingsValue(DataStorageLayer::kComponentsScreenplayEditorShowSceneNumbersKey).toBool();
+}
+
+void ScreenplayInformationModel::setShowSceneNumbers(bool _show)
+{
+    if (d->showSceneNumbers == _show) {
+        return;
+    }
+
+    d->showSceneNumbers = _show;
+    emit showSceneNumbersChanged(d->showSceneNumbers);
+}
+
+bool ScreenplayInformationModel::showSceneNumbersOnLeft() const
+{
+    if (d->overrideCommonSettings) {
+        return d->showSceneNumbersOnLeft;
+    }
+
+    return settingsValue(DataStorageLayer::kComponentsScreenplayEditorShowSceneNumbersOnLeftKey)
+        .toBool();
+}
+
+void ScreenplayInformationModel::setShowSceneNumbersOnLeft(bool _show)
+{
+    if (d->showSceneNumbersOnLeft == _show) {
+        return;
+    }
+
+    d->showSceneNumbersOnLeft = _show;
+    emit showSceneNumbersOnLeftChanged(d->showSceneNumbersOnLeft);
+}
+
+bool ScreenplayInformationModel::showSceneNumbersOnRight() const
+{
+    if (d->overrideCommonSettings) {
+        return d->showSceneNumbersOnRight;
+    }
+
+    return settingsValue(DataStorageLayer::kComponentsScreenplayEditorShowSceneNumbersOnRightKey)
+        .toBool();
+}
+
+void ScreenplayInformationModel::setShowSceneNumbersOnRight(bool _show)
+{
+    if (d->showSceneNumbersOnRight == _show) {
+        return;
+    }
+
+    d->showSceneNumbersOnRight = _show;
+    emit showSceneNumbersOnRightChanged(d->showSceneNumbersOnRight);
+}
+
+bool ScreenplayInformationModel::showDialoguesNumbers() const
+{
+    if (d->overrideCommonSettings) {
+        return d->showDialoguesNumbers;
+    }
+
+    return settingsValue(DataStorageLayer::kComponentsScreenplayEditorShowDialogueNumbersKey)
+        .toBool();
+}
+
+void ScreenplayInformationModel::setShowDialoguesNumbers(bool _show)
+{
+    if (d->showDialoguesNumbers == _show) {
+        return;
+    }
+
+    d->showDialoguesNumbers = _show;
+    emit showDialoguesNumbersChanged(d->showDialoguesNumbers);
 }
 
 void ScreenplayInformationModel::initDocument()
@@ -314,36 +532,47 @@ void ScreenplayInformationModel::initDocument()
     d->titlePageVisible = documentNode.firstChildElement(kTitlePageVisibleKey).text() == "true";
     d->synopsisVisible = documentNode.firstChildElement(kSynopsisVisibleKey).text() == "true";
     d->treatmentVisible = documentNode.firstChildElement(kTreatmentVisibleKey).text() == "true";
-    d->screenplayTextVisible = documentNode.firstChildElement(kScreenplayTextVisibleKey).text() == "true";
-    d->screenplayStatisticsVisible = documentNode.firstChildElement(kScreenplayStatisticsVisibleKey).text() == "true";
+    d->screenplayTextVisible
+        = documentNode.firstChildElement(kScreenplayTextVisibleKey).text() == "true";
+    d->screenplayStatisticsVisible
+        = documentNode.firstChildElement(kScreenplayStatisticsVisibleKey).text() == "true";
     d->header = documentNode.firstChildElement(kHeaderKey).text();
-    d->printHeaderOnTitlePage = documentNode.firstChildElement(kPrintHeaderOnTitlePageKey).text() == "true";
+    d->printHeaderOnTitlePage
+        = documentNode.firstChildElement(kPrintHeaderOnTitlePageKey).text() == "true";
     d->footer = documentNode.firstChildElement(kFooterKey).text();
-    d->printFooterOnTitlePage = documentNode.firstChildElement(kPrintFooterOnTitlePageKey).text() == "true";
-    d->scenesNumbersPrefix = documentNode.firstChildElement(kScenesNumbersPrefixKey).text();
-    const auto scenesNumberingStartAtNode = documentNode.firstChildElement(kScenesNumberingStartAtKey);
+    d->printFooterOnTitlePage
+        = documentNode.firstChildElement(kPrintFooterOnTitlePageKey).text() == "true";
+    //
+    // TODO: выпилить в одной из будущих версий
+    //
+    if (!documentNode.firstChildElement(kScenesNumbersPrefixKey).isNull()) {
+        d->scenesNumbersTemplate
+            = documentNode.firstChildElement(kScenesNumbersPrefixKey).text() + "#.";
+    } else {
+        d->scenesNumbersTemplate = documentNode.firstChildElement(kScenesNumbersTemplateKey).text();
+    }
+    const auto scenesNumberingStartAtNode
+        = documentNode.firstChildElement(kScenesNumberingStartAtKey);
     if (!scenesNumberingStartAtNode.isNull()) {
         d->scenesNumberingStartAt = scenesNumberingStartAtNode.text().toInt();
     }
+    d->isScenesNumbersLocked
+        = documentNode.firstChildElement(kIsScenesNumberingLockedKey).text() == "true";
+    d->overrideCommonSettings
+        = documentNode.firstChildElement(kOverrideSystemSettingsKey).text() == "true";
+    d->templateId = documentNode.firstChildElement(kTemplateIdKey).text();
+    d->showSceneNumbers = documentNode.firstChildElement(kShowSceneNumbersKey).text() == "true";
+    d->showSceneNumbersOnLeft
+        = documentNode.firstChildElement(kShowSceneNumbersOnLeftKey).text() == "true";
+    d->showSceneNumbersOnRight
+        = documentNode.firstChildElement(kShowScenesNumbersOnRightKey).text() == "true";
+    d->showDialoguesNumbers
+        = documentNode.firstChildElement(kShowDialoguesNumbersKey).text() == "true";
 }
 
 void ScreenplayInformationModel::clearDocument()
 {
-    QSignalBlocker signalBlocker(this);
-
-    setName({});
-    setLogline({});
-    setTitlePageVisible({});
-    setSynopsisVisible({});
-    setTreatmentVisible({});
-    setScreenplayTextVisible({});
-    setScreenplayStatisticsVisible({});
-    setHeader({});
-    setPrintHeaderOnTitlePage({});
-    setFooter({});
-    setPrintFooterOnTitlePage({});
-    setScenesNumbersPrefix({});
-    setScenesNumberingStartAt({});
+    d.reset(new Implementation);
 }
 
 QByteArray ScreenplayInformationModel::toXml() const
@@ -353,23 +582,101 @@ QByteArray ScreenplayInformationModel::toXml() const
     }
 
     QByteArray xml = "<?xml version=\"1.0\"?>\n";
-    xml += QString("<%1 mime-type=\"%2\" version=\"1.0\">\n").arg(kDocumentKey, Domain::mimeTypeFor(document()->type())).toUtf8();
-    xml += QString("<%1><![CDATA[%2]]></%1>\n").arg(kNameKey, d->name).toUtf8();
-    xml += QString("<%1><![CDATA[%2]]></%1>\n").arg(kTaglineKey, d->tagline).toUtf8();
-    xml += QString("<%1><![CDATA[%2]]></%1>\n").arg(kLoglineKey, d->logline).toUtf8();
-    xml += QString("<%1><![CDATA[%2]]></%1>\n").arg(kTitlePageVisibleKey, d->titlePageVisible ? "true" : "false").toUtf8();
-    xml += QString("<%1><![CDATA[%2]]></%1>\n").arg(kSynopsisVisibleKey, d->synopsisVisible ? "true" : "false").toUtf8();
-    xml += QString("<%1><![CDATA[%2]]></%1>\n").arg(kTreatmentVisibleKey, d->treatmentVisible ? "true" : "false").toUtf8();
-    xml += QString("<%1><![CDATA[%2]]></%1>\n").arg(kScreenplayTextVisibleKey, d->screenplayTextVisible ? "true" : "false").toUtf8();
-    xml += QString("<%1><![CDATA[%2]]></%1>\n").arg(kScreenplayStatisticsVisibleKey, d->screenplayStatisticsVisible ? "true" : "false").toUtf8();
-    xml += QString("<%1><![CDATA[%2]]></%1>\n").arg(kHeaderKey, d->header).toUtf8();
-    xml += QString("<%1><![CDATA[%2]]></%1>\n").arg(kPrintHeaderOnTitlePageKey, d->printHeaderOnTitlePage ? "true" : "false").toUtf8();
-    xml += QString("<%1><![CDATA[%2]]></%1>\n").arg(kFooterKey, d->footer).toUtf8();
-    xml += QString("<%1><![CDATA[%2]]></%1>\n").arg(kPrintFooterOnTitlePageKey, d->printFooterOnTitlePage ? "true" : "false").toUtf8();
-    xml += QString("<%1><![CDATA[%2]]></%1>\n").arg(kScenesNumbersPrefixKey, d->scenesNumbersPrefix).toUtf8();
-    xml += QString("<%1><![CDATA[%2]]></%1>\n").arg(kScenesNumberingStartAtKey, QString::number(d->scenesNumberingStartAt)).toUtf8();
+    xml += QString("<%1 mime-type=\"%2\" version=\"1.0\">\n")
+               .arg(kDocumentKey, Domain::mimeTypeFor(document()->type()))
+               .toUtf8();
+    auto writeTag = [&xml](const QString& _key, const QString& _value) {
+        xml += QString("<%1><![CDATA[%2]]></%1>\n").arg(_key, _value).toUtf8();
+    };
+    auto writeBoolTag = [&writeTag](const QString& _key, bool _value) {
+        writeTag(_key, _value ? "true" : "false");
+    };
+    writeTag(kNameKey, d->name);
+    writeTag(kTaglineKey, d->tagline);
+    writeTag(kLoglineKey, d->logline);
+    writeBoolTag(kTitlePageVisibleKey, d->titlePageVisible);
+    writeBoolTag(kSynopsisVisibleKey, d->synopsisVisible);
+    writeBoolTag(kTreatmentVisibleKey, d->treatmentVisible);
+    writeBoolTag(kScreenplayTextVisibleKey, d->screenplayTextVisible);
+    writeBoolTag(kScreenplayStatisticsVisibleKey, d->screenplayStatisticsVisible);
+    writeTag(kHeaderKey, d->header);
+    writeBoolTag(kPrintHeaderOnTitlePageKey, d->printHeaderOnTitlePage);
+    writeTag(kFooterKey, d->footer);
+    writeBoolTag(kPrintFooterOnTitlePageKey, d->printFooterOnTitlePage);
+    writeTag(kScenesNumbersTemplateKey, d->scenesNumbersTemplate);
+    writeTag(kScenesNumberingStartAtKey, QString::number(d->scenesNumberingStartAt));
+    writeBoolTag(kIsScenesNumberingLockedKey, d->isScenesNumbersLocked);
+    writeBoolTag(kOverrideSystemSettingsKey, d->overrideCommonSettings);
+    writeTag(kTemplateIdKey, d->templateId);
+    writeBoolTag(kShowSceneNumbersKey, d->showSceneNumbers);
+    writeBoolTag(kShowSceneNumbersOnLeftKey, d->showSceneNumbersOnLeft);
+    writeBoolTag(kShowScenesNumbersOnRightKey, d->showSceneNumbersOnRight);
+    writeBoolTag(kShowDialoguesNumbersKey, d->showDialoguesNumbers);
     xml += QString("</%1>").arg(kDocumentKey).toUtf8();
     return xml;
+}
+
+ChangeCursor ScreenplayInformationModel::applyPatch(const QByteArray& _patch)
+{
+    //
+    // Определить область изменения в xml
+    //
+    auto changes = dmpController().changedXml(toXml(), _patch);
+    if (changes.first.xml.isEmpty() && changes.second.xml.isEmpty()) {
+        Log::warning("Screenplay information model patch don't lead to any changes");
+        return {};
+    }
+
+    changes.second.xml = xml::prepareXml(changes.second.xml);
+
+    QDomDocument domDocument;
+    domDocument.setContent(changes.second.xml);
+    const auto documentNode = domDocument.firstChildElement(kDocumentKey);
+    auto setText
+        = [&documentNode](const QString& _key, std::function<void(const QString&)> _setter) {
+              const auto node = documentNode.firstChildElement(_key);
+              if (!node.isNull()) {
+                  _setter(node.text());
+              }
+          };
+    auto setBool = [&documentNode](const QString& _key, std::function<void(bool)> _setter) {
+        const auto node = documentNode.firstChildElement(_key);
+        if (!node.isNull()) {
+            _setter(node.text() == "true");
+        }
+    };
+    auto setInt = [&documentNode](const QString& _key, std::function<void(int)> _setter) {
+        const auto node = documentNode.firstChildElement(_key);
+        if (!node.isNull()) {
+            _setter(node.text().toInt());
+        }
+    };
+    using M = ScreenplayInformationModel;
+    const auto _1 = std::placeholders::_1;
+    setText(kNameKey, std::bind(&M::setName, this, _1));
+    setText(kTaglineKey, std::bind(&M::setTagline, this, _1));
+    setText(kLoglineKey, std::bind(&M::setLogline, this, _1));
+    setBool(kTitlePageVisibleKey, std::bind(&M::setTitlePageVisible, this, _1));
+    setBool(kSynopsisVisibleKey, std::bind(&M::setSynopsisVisible, this, _1));
+    setBool(kTreatmentVisibleKey, std::bind(&M::setTreatmentVisible, this, _1));
+    setBool(kScreenplayTextVisibleKey, std::bind(&M::setScreenplayTextVisible, this, _1));
+    setBool(kScreenplayStatisticsVisibleKey,
+            std::bind(&M::setScreenplayStatisticsVisible, this, _1));
+    setText(kHeaderKey, std::bind(&M::setHeader, this, _1));
+    setBool(kPrintHeaderOnTitlePageKey, std::bind(&M::setPrintHeaderOnTitlePage, this, _1));
+    setText(kFooterKey, std::bind(&M::setFooter, this, _1));
+    setBool(kPrintFooterOnTitlePageKey, std::bind(&M::setPrintFooterOnTitlePage, this, _1));
+    setText(kScenesNumbersTemplateKey, std::bind(&M::setScenesNumbersTemplate, this, _1));
+    setInt(kScenesNumberingStartAtKey, std::bind(&M::setScenesNumberingStartAt, this, _1));
+    setBool(kIsScenesNumberingLockedKey, std::bind(&M::setScenesNumbersLocked, this, _1));
+    setBool(kOverrideSystemSettingsKey, std::bind(&M::setOverrideCommonSettings, this, _1));
+    setText(kTemplateIdKey, std::bind(&M::setTemplateId, this, _1));
+    setBool(kShowSceneNumbersKey, std::bind(&M::setShowSceneNumbers, this, _1));
+    setBool(kShowSceneNumbersOnLeftKey, std::bind(&M::setShowSceneNumbersOnLeft, this, _1));
+    setBool(kShowScenesNumbersOnRightKey, std::bind(&M::setShowSceneNumbersOnRight, this, _1));
+    setBool(kShowDialoguesNumbersKey, std::bind(&M::setShowDialoguesNumbers, this, _1));
+
+    return {};
 }
 
 } // namespace BusinessLayer

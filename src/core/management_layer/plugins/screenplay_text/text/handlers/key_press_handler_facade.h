@@ -6,16 +6,15 @@ class QEvent;
 class QKeyEvent;
 
 namespace BusinessLayer {
-    enum class ScreenplayParagraphType;
+enum class TextParagraphType;
 }
 
 namespace Ui {
-    class ScreenplayTextEdit;
+class ScreenplayTextEdit;
 }
 
 
-namespace KeyProcessingLayer
-{
+namespace KeyProcessingLayer {
 
 class AbstractKeyHandler;
 
@@ -72,7 +71,7 @@ private:
     /**
      * @brief Получить обработчик для заданного типа
      */
-    AbstractKeyHandler* handlerFor(BusinessLayer::ScreenplayParagraphType _type);
+    AbstractKeyHandler* handlerFor(BusinessLayer::TextParagraphType _type);
 
 private:
     class Implementation;

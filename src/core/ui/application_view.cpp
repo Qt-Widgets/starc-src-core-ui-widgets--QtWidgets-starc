@@ -1,25 +1,35 @@
 #include "application_view.h"
 
 #include <ui/design_system/design_system.h>
+#include <ui/settings/theme_setup_view.h>
+#include <ui/widgets/app_bar/app_bar.h>
+#include <ui/widgets/label/label.h>
 #include <ui/widgets/shadow/shadow.h>
 #include <ui/widgets/splitter/splitter.h>
 #include <ui/widgets/stack_widget/stack_widget.h>
 #include <ui/widgets/task_bar/task_bar.h>
+#include <utils/helpers/color_helper.h>
+#include <utils/helpers/platform_helper.h>
+#include <utils/logging.h>
 
-#include <QAction>
 #include <QCloseEvent>
 #include <QPainter>
+#include <QParallelAnimationGroup>
+#include <QScreen>
+#include <QTimer>
 #include <QToolTip>
 #include <QVBoxLayout>
+#include <QVariantAnimation>
 
 
-namespace Ui
-{
+namespace Ui {
 
 namespace {
-    const QString kSplitterState = "splitter/state";
-    const QString kViewGeometry = "view/geometry";
-}
+const QString kSplitterState = "splitter/state";
+const QString kViewGeometry = "view/geometry";
+const QVector<int> kDefaultSizes = { 3, 7 };
+
+} // namespace
 
 class ApplicationView::Implementation
 {
@@ -31,19 +41,29 @@ public:
     StackWidget* navigator = nullptr;
     StackWidget* view = nullptr;
 
+    QByteArray lastSplitterState;
     Splitter* splitter = nullptr;
 
-    Widget* accountBar = nullptr;
+    ThemeSetupView* themeSetupView = nullptr;
+
+    IconsBigLabel* turnOffFullScreenIcon = nullptr;
 };
 
 ApplicationView::Implementation::Implementation(QWidget* _parent)
-    : navigationWidget(new Widget(_parent)),
-      toolBar(new StackWidget(_parent)),
-      navigator(new StackWidget(_parent)),
-      view(new StackWidget(_parent)),
-      splitter(new Splitter(_parent))
+    : navigationWidget(new Widget(_parent))
+    , toolBar(new StackWidget(_parent))
+    , navigator(new StackWidget(_parent))
+    , view(new StackWidget(_parent))
+    , splitter(new Splitter(_parent))
+    , themeSetupView(new ThemeSetupView(_parent))
+    , turnOffFullScreenIcon(new IconsBigLabel(_parent))
 {
     new Shadow(view);
+    auto splitterTopShadow = new Shadow(Qt::TopEdge, splitter);
+    splitterTopShadow->setVisibilityAnchor(themeSetupView);
+
+    turnOffFullScreenIcon->setIcon(u8"\U000F0294");
+    turnOffFullScreenIcon->hide();
 }
 
 
@@ -51,8 +71,8 @@ ApplicationView::Implementation::Implementation(QWidget* _parent)
 
 
 ApplicationView::ApplicationView(QWidget* _parent)
-    : Widget(_parent),
-      d(new Implementation(this))
+    : Widget(_parent)
+    , d(new Implementation(this))
 {
     d->view->installEventFilter(this);
 
@@ -63,17 +83,80 @@ ApplicationView::ApplicationView(QWidget* _parent)
     navigationLayout->addWidget(d->navigator);
 
     d->splitter->setWidgets(d->navigationWidget, d->view);
-    d->splitter->setSizes({3, 7});
+    d->splitter->setSizes(kDefaultSizes);
+
+    d->themeSetupView->hide();
 
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->setContentsMargins({});
     layout->setSpacing(0);
-    layout->addWidget(d->splitter);
+    layout->addWidget(d->themeSetupView);
+    layout->addWidget(d->splitter, 1);
 
-    designSystemChangeEvent(nullptr);
+
+    connect(d->turnOffFullScreenIcon, &IconsBigLabel::clicked, this,
+            &ApplicationView::turnOffFullScreenRequested);
 }
 
 ApplicationView::~ApplicationView() = default;
+
+ThemeSetupView* ApplicationView::themeSetupView() const
+{
+    return d->themeSetupView;
+}
+
+QWidget* ApplicationView::view() const
+{
+    return d->view;
+}
+
+void ApplicationView::slideViewOut()
+{
+    const auto finalWidth = DesignSystem::layout().px(1200);
+    auto navigatorWidthAnimation = new QVariantAnimation(this);
+    navigatorWidthAnimation->setDuration(40);
+    navigatorWidthAnimation->setEasingCurve(QEasingCurve::OutQuart);
+    navigatorWidthAnimation->setStartValue(width());
+    navigatorWidthAnimation->setEndValue(
+        static_cast<int>(finalWidth / std::accumulate(kDefaultSizes.begin(), kDefaultSizes.end(), 0)
+                         * kDefaultSizes.constFirst()));
+    auto fullWidthAnimation = new QVariantAnimation(this);
+    fullWidthAnimation->setDuration(260);
+    fullWidthAnimation->setEasingCurve(QEasingCurve::OutQuad);
+    fullWidthAnimation->setStartValue(width());
+    fullWidthAnimation->setEndValue(static_cast<int>(finalWidth));
+    connect(fullWidthAnimation, &QVariantAnimation::valueChanged, this,
+            [this, navigatorWidthAnimation](const QVariant& _value) {
+                const auto width = _value.toInt();
+                resize(width, height());
+                const auto navigatorWidth = navigatorWidthAnimation->currentValue().toInt();
+                d->splitter->setSizes({ navigatorWidth, width - navigatorWidth });
+
+                move(screen()->availableGeometry().center() - QPoint(width / 2, height() / 2));
+            });
+    auto animation = new QParallelAnimationGroup(this);
+    animation->addAnimation(fullWidthAnimation);
+    animation->addAnimation(navigatorWidthAnimation);
+    connect(
+        animation, &QParallelAnimationGroup::stateChanged, this,
+        [this, fullWidthAnimation, navigatorWidthAnimation](QAbstractAnimation::State _newState) {
+            if (_newState == QAbstractAnimation::Running) {
+                d->view->setMinimumSize(fullWidthAnimation->endValue().toInt()
+                                            - navigatorWidthAnimation->endValue().toInt(),
+                                        height());
+            } else if (_newState == QAbstractAnimation::Stopped) {
+                d->view->setMinimumSize(0, 0);
+            }
+        });
+    animation->start(QAbstractAnimation::DeleteWhenStopped);
+
+    d->view->show();
+}
+
+void ApplicationView::setHideNavigationButtonAvailable(bool _available)
+{
+    d->splitter->setHidePanelButtonAvailable(_available);
+}
 
 QVariantMap ApplicationView::saveState() const
 {
@@ -83,42 +166,77 @@ QVariantMap ApplicationView::saveState() const
     return state;
 }
 
-void ApplicationView::restoreState(const QVariantMap& _state)
+void ApplicationView::restoreState(bool _onboaringPassed, const QVariantMap& _state)
 {
+    //
+    // Если это первый запуск, то конфигурируем геометрию под онбординг
+    //
+    if (!_onboaringPassed || _state.isEmpty()) {
+        d->splitter->setSizes({ 1, 0 });
+        d->view->hide();
+        resize(Ui::DesignSystem::layout().px(468), Ui::DesignSystem::layout().px(740));
+        move(screen()->availableGeometry().center() - QPoint(width() / 2, height() / 2));
+        return;
+    }
+
     if (_state.contains(kSplitterState)) {
         d->splitter->restoreState(_state[kSplitterState].toByteArray());
     }
     if (_state.contains(kViewGeometry)) {
         restoreGeometry(_state[kViewGeometry].toByteArray());
+
+        //
+        // Иногда (пока такое только на маке встречалось) бывает так, что приложение начинает
+        // загружать геометрию невалидную, поэтому сделана эта проверка и расширение размера вьюхи
+        //
+        constexpr int minSize = 100;
+        if (height() < minSize || width() < minSize) {
+            resize(Ui::DesignSystem::layout().px(1200), Ui::DesignSystem::layout().px(740));
+            move(screen()->availableGeometry().center() - QPoint(width() / 2, height() / 2));
+        }
+    }
+
+    //
+    // Если пользователь закрыл приложение в полноэкранном состоянии, то при старте выходим из него
+    //
+    if (isFullScreen()) {
+        toggleFullScreen(true);
+        showMaximized();
     }
 }
 
 void ApplicationView::showContent(QWidget* _toolbar, QWidget* _navigator, QWidget* _view)
 {
+    Log::debug("Show content: %1, %2, %3", _toolbar->metaObject()->className(),
+               _navigator->metaObject()->className(), _view->metaObject()->className());
+
     d->toolBar->setCurrentWidget(_toolbar);
     d->navigator->setCurrentWidget(_navigator);
     d->view->setCurrentWidget(_view);
+
+    //
+    // Фокусируем представление, после того, как оно будет отображено пользователю
+    //
+    QTimer::singleShot(d->view->animationDuration() * 1.3, this, [this] { d->view->setFocus(); });
 }
 
-void ApplicationView::setAccountBar(Widget* _accountBar)
+void ApplicationView::toggleFullScreen(bool _isFullScreen)
 {
-    d->accountBar = _accountBar;
-}
-
-bool ApplicationView::eventFilter(QObject* _target, QEvent* _event)
-{
-    if (d->accountBar != nullptr
-        && _target == d->view
-        && _event->type() == QEvent::Resize) {
-        QResizeEvent* event = static_cast<QResizeEvent*>(_event);
-        d->accountBar->move(d->view->mapTo(this, QPoint())
-                            + QPointF(event->size().width()
-                                      - d->accountBar->width()
-                                      - Ui::DesignSystem::layout().px24(),
-                                      Ui::DesignSystem::layout().px24()).toPoint());
+    if (!_isFullScreen) {
+        d->lastSplitterState = d->splitter->saveState();
+        d->turnOffFullScreenIcon->show();
     }
 
-    return Widget::eventFilter(_target, _event);
+    d->navigationWidget->setVisible(_isFullScreen);
+
+    if (_isFullScreen) {
+        d->turnOffFullScreenIcon->hide();
+        if (!d->lastSplitterState.isEmpty()) {
+            d->splitter->restoreState(d->lastSplitterState);
+        } else {
+            d->splitter->setSizes(kDefaultSizes);
+        }
+    }
 }
 
 void ApplicationView::closeEvent(QCloseEvent* _event)
@@ -131,9 +249,16 @@ void ApplicationView::closeEvent(QCloseEvent* _event)
     emit closeRequested();
 }
 
+void ApplicationView::updateTranslations()
+{
+    d->turnOffFullScreenIcon->setToolTip(tr("Turn off full screen"));
+}
+
 void ApplicationView::designSystemChangeEvent(DesignSystemChangeEvent* _event)
 {
     Q_UNUSED(_event)
+
+    setBackgroundColor(Ui::DesignSystem::color().primary());
 
     QPalette toolTipPalette;
     toolTipPalette.setColor(QPalette::ToolTipBase, Ui::DesignSystem::color().onSurface());
@@ -150,18 +275,19 @@ void ApplicationView::designSystemChangeEvent(DesignSystemChangeEvent* _event)
 
     d->view->setBackgroundColor(DesignSystem::color().surface());
 
-    if (d->accountBar != nullptr) {
-        d->accountBar->resize(d->accountBar->sizeHint());
-        d->accountBar->move(QPointF(size().width()
-                                    - d->accountBar->width()
-                                    - Ui::DesignSystem::layout().px24(),
-                                    Ui::DesignSystem::layout().px24()).toPoint());
-        d->accountBar->setBackgroundColor(Ui::DesignSystem::color().primary());
-        d->accountBar->setTextColor(Ui::DesignSystem::color().onPrimary());
-    }
+    d->turnOffFullScreenIcon->raise();
+    d->turnOffFullScreenIcon->setTextColor(Ui::DesignSystem::color().onSurface());
+    d->turnOffFullScreenIcon->setBackgroundColor(Qt::transparent);
+    d->turnOffFullScreenIcon->resize(d->turnOffFullScreenIcon->sizeHint());
+    d->turnOffFullScreenIcon->move(Ui::DesignSystem::layout().px24(),
+                                   Ui::DesignSystem::layout().px24());
 
     TaskBar::registerTaskBar(this, Ui::DesignSystem::color().primary(),
-        Ui::DesignSystem::color().onPrimary(), Ui::DesignSystem::color().secondary());
+                             Ui::DesignSystem::color().onPrimary(),
+                             Ui::DesignSystem::color().accent());
+
+    PlatformHelper::setTitleBarTheme(
+        this, ColorHelper::isColorLight(Ui::DesignSystem::color().background()));
 }
 
 } // namespace Ui

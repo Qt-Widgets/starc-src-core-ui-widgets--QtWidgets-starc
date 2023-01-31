@@ -4,8 +4,7 @@
 
 class QString;
 
-namespace ManagementLayer
-{
+namespace ManagementLayer {
 
 /**
  * @brief Интерфейс менеджера приложения
@@ -16,6 +15,11 @@ public:
     virtual ~IApplicationManager() = default;
 
     /**
+     * @brief Получить путь к файлу с логами
+     */
+    virtual QString logFilePath() const = 0;
+
+    /**
      * @brief Запустить приложение
      */
     virtual void exec(const QString& _fileToOpenPath) = 0;
@@ -23,9 +27,10 @@ public:
     /**
      * @brief Открыть проект по заданному пути
      */
-    virtual void openProject(const QString& _path) = 0;
+    virtual bool openProject(const QString& _path) = 0;
 };
 
 } // namespace ManagementLayer
 
-Q_DECLARE_INTERFACE(ManagementLayer::IApplicationManager, "app.starc.ManagementLayer.IApplicationManager")
+Q_DECLARE_INTERFACE(ManagementLayer::IApplicationManager,
+                    "app.starc.ManagementLayer.IApplicationManager")

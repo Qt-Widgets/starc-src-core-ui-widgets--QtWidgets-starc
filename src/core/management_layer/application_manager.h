@@ -1,14 +1,13 @@
 #pragma once
 
-#include <core_global.h>
-
 #include <interfaces/management_layer/i_application_manager.h>
 
 #include <QObject>
 
+#include <core_global.h>
 
-namespace ManagementLayer
-{
+
+namespace ManagementLayer {
 
 /**
  * @brief Менеджер приложения
@@ -24,6 +23,11 @@ public:
     ~ApplicationManager() override;
 
     /**
+     * @brief Получить путь к файлу с логами
+     */
+    QString logFilePath() const override;
+
+    /**
      * @brief Запуск приложения
      */
     void exec(const QString& _fileToOpenPath) override final;
@@ -31,7 +35,7 @@ public:
     /**
      * @brief Открытие файла
      */
-    void openProject(const QString& _path) override final;
+    bool openProject(const QString& _path) override final;
 
 protected:
     /**

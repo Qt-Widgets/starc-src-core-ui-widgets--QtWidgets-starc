@@ -3,8 +3,10 @@
 #include <QScopedPointer>
 #include <QString>
 
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
 template<typename, typename>
-class QPair;
+struct QPair;
+#endif
 
 
 /**
@@ -31,10 +33,17 @@ public:
      * @return Пара: 1) текст, который был изменён; 2) текст замены
      */
     struct Change {
-        QString xml;
+        QByteArray xml;
         int from = 0;
     };
     QPair<Change, Change> changedXml(const QString& _xml, const QString& _patch) const;
+
+    /**
+     * @brief Получить финальную позицию изменения в изменённом тексте
+     * @param _before Текст до замены
+     * @param _after Текст после замены
+     */
+    int changeEndPosition(const QString& _before, const QString& _after) const;
 
 private:
     class Implementation;

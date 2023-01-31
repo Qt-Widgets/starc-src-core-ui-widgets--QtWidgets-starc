@@ -1,6 +1,8 @@
 TEMPLATE = lib
 
 CONFIG += plugin c++1z
+CONFIG += force_debug_info
+CONFIG += separate_debug_info
 QT += widgets
 
 TARGET = projectinformationplugin
@@ -29,14 +31,10 @@ DEPENDPATH += $$PWD/../../../../corelib
 #
 
 HEADERS += \
-    cover.h \
-    cover_dialog.h \
     project_information_manager.h \
     project_information_view.h
 
 SOURCES += \
-    cover.cpp \
-    cover_dialog.cpp \
     project_information_manager.cpp \
     project_information_view.cpp
 

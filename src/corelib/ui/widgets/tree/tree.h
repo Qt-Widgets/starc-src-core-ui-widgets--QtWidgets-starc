@@ -4,6 +4,8 @@
 
 #include <QAbstractItemView>
 
+class QHeaderView;
+
 
 /**
  * @brief Виджет дерева элементов
@@ -27,6 +29,11 @@ public:
     QAbstractItemModel* model() const;
 
     /**
+     * @brief Все строки модели (включая вложенные)
+     */
+    int recursiveRowCount(bool _onlyExpanded = false) const;
+
+    /**
      * @brief Задать необходимость отображения декорации у корневых элементов
      */
     void setRootIsDecorated(bool _decorated);
@@ -40,6 +47,21 @@ public:
      * @brief Получить вертикальную полосу прокрутки виджета
      */
     QScrollBar* verticalScrollBar() const;
+
+    /**
+     * @brief Установить видимость заголовков
+     */
+    void setHeaderVisible(bool _visible);
+
+    /**
+     * @brief Установить ширину колонки
+     */
+    void setColumnWidth(int _column, int _width);
+
+    /**
+     * @brief Настроить видимость колонки
+     */
+    void setColumnVisible(int _column, bool _visible);
 
     /**
      * @brief Включить/отключить возможность перетаскивания элементов
@@ -60,6 +82,7 @@ public:
      * @brief Задать делегат для отрисовки элементов
      */
     void setItemDelegate(QAbstractItemDelegate* _delegate);
+    void setItemDelegateForColumn(int _column, QAbstractItemDelegate* _delegate);
 
     /**
      * @brief Задать текущий индекс
@@ -82,9 +105,30 @@ public:
     QModelIndexList selectedIndexes() const;
 
     /**
-     * @brief Развернуть все элементы
+     * @brief Очистить выделение
+     */
+    void clearSelection();
+
+    /**
+     * @brief Задать возможность раскрывать узлы дерева двойным кликом
+     */
+    void setExpandsOnDoubleClick(bool _expand);
+
+    /**
+     * @brief Развёрнут ли заданный элемент
+     */
+    bool isExpanded(const QModelIndex& _index) const;
+
+    /**
+     * @brief Развернуть заданный элемент
+     */
+    void expand(const QModelIndex& _index);
+
+    /**
+     * @brief Развернуть/свернуть все элементы
      */
     void expandAll();
+    void collapseAll();
 
     /**
      * @brief Установить необходимость пересчитывать размер элементов в делегате
@@ -97,6 +141,27 @@ public:
     QRect visualRect(const QModelIndex& _index) const;
 
     /**
+     * @brief Представление заголовка дерева
+     */
+    void setHeader(QHeaderView* _headerView);
+    QHeaderView* headerView() const;
+
+    /**
+     * @brief Получить размер вьюпорта
+     */
+    QSize viewportSizeHint() const;
+
+    /**
+     * @brief Задать действия приводящие к редактированию элементов дерева
+     */
+    void setEditTriggers(QAbstractItemView::EditTriggers _triggers);
+
+    /**
+     * @brief Активировать редактирование заданного элемента
+     */
+    void edit(const QModelIndex& _index);
+
+    /**
      * @brief Загрузить состояние дерева
      */
     void restoreState(const QVariant& _state);
@@ -105,6 +170,11 @@ public:
      * @brief Сохранить состояние дерева
      */
     QVariant saveState() const;
+
+    /**
+     * @brief Определить, находится ли заданная позиция над иконкой в конце элемента
+     */
+    bool isOnItemTrilingIcon(const QPoint& _position) const;
 
 signals:
     /**
@@ -115,12 +185,22 @@ signals:
     /**
      * @brief Пользователь кликнул на заданном элементе
      */
-    void clicked(const QModelIndex& _index);
+    void clicked(const QModelIndex& _index, bool _firstClick);
 
     /**
      * @brief Пользователь сделал двойной клик на элемента
      */
     void doubleClicked(const QModelIndex& _index);
+
+    /**
+     * @brief Элемент был раскрыт
+     */
+    void expanded(const QModelIndex& _index);
+
+    /**
+     * @brief Элемент был свёрнут
+     */
+    void collapsed(const QModelIndex& _index);
 
 protected:
     /**

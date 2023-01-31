@@ -3,19 +3,20 @@
 #include <QVariant>
 
 
-namespace BusinessLayer
-{
+namespace BusinessLayer {
 
 class TextModelItem::Implementation
 {
 public:
-    explicit Implementation(TextModelItemType _type);
+    Implementation(TextModelItemType _type, const TextModel* _model);
 
     const TextModelItemType type;
+    const TextModel* model = nullptr;
 };
 
-TextModelItem::Implementation::Implementation(TextModelItemType _type)
+TextModelItem::Implementation::Implementation(TextModelItemType _type, const TextModel* _model)
     : type(_type)
+    , model(_model)
 {
 }
 
@@ -23,16 +24,27 @@ TextModelItem::Implementation::Implementation(TextModelItemType _type)
 // ****
 
 
-TextModelItem::TextModelItem(TextModelItemType _type)
-    : d(new Implementation(_type))
+TextModelItem::TextModelItem(TextModelItemType _type, const TextModel* _model)
+    : d(new Implementation(_type, _model))
 {
+    Q_ASSERT(_model);
 }
 
 TextModelItem::~TextModelItem() = default;
 
-TextModelItemType TextModelItem::type() const
+const TextModelItemType& TextModelItem::type() const
 {
     return d->type;
+}
+
+int TextModelItem::subtype() const
+{
+    return 0;
+}
+
+const TextModel* TextModelItem::model() const
+{
+    return d->model;
 }
 
 TextModelItem* TextModelItem::parent() const

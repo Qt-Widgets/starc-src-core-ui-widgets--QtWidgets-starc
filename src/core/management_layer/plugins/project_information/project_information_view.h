@@ -1,18 +1,26 @@
 #pragma once
 
-#include <ui/widgets/widget/widget.h>
+#include <interfaces/ui/i_document_view.h>
+#include <ui/widgets/image/image_card.h>
 
 
-namespace Ui
-{
+namespace Ui {
 
-class ProjectInformationView : public Widget
+class ProjectInformationView : public Widget, public IDocumentView
 {
     Q_OBJECT
 
 public:
     explicit ProjectInformationView(QWidget* _parent = nullptr);
     ~ProjectInformationView() override;
+
+    /**
+     * @brief Реализация интерфейса IDocumentView
+     */
+    /** @{ */
+    QWidget* asQWidget() override;
+    void setEditingMode(ManagementLayer::DocumentEditingMode _mode) override;
+    /** @} */
 
     void setName(const QString& _name);
     Q_SIGNAL void nameChanged(const QString& _name);
@@ -21,12 +29,7 @@ public:
     Q_SIGNAL void loglineChanged(const QString& _logline);
 
     void setCover(const QPixmap& _cover);
-
-signals:
-    /**
-     * @brief Пользователь хочет выбрать обложку проекта
-     */
-    void selectCoverPressed();
+    Q_SIGNAL void coverChanged(const QPixmap& _cover);
 
 protected:
     /**
@@ -38,6 +41,45 @@ protected:
      * @brief Обновляем виджет при изменении дизайн системы
      */
     void designSystemChangeEvent(DesignSystemChangeEvent* _event) override;
+
+private:
+    class Implementation;
+    QScopedPointer<Implementation> d;
+};
+
+
+/**
+ * @brief Класс карточки постера, открывающий доступ к генератору постеров
+ */
+class CoverImageCard : public ImageCard
+{
+    Q_OBJECT
+
+public:
+    explicit CoverImageCard(QWidget* _parent = nullptr);
+    ~CoverImageCard() override;
+
+signals:
+    /**
+     * @brief Пользователь хочет сгенерировать постер
+     */
+    void generateCoverPressed();
+
+protected:
+    /**
+     * @brief Получить список действий контекстного меню
+     */
+    QVector<QAction*> contextMenuActions() const override;
+
+    /**
+     * @brief Дизейблим возможность генерации постера
+     */
+    void processReadOnlyChange() override;
+
+    /**
+     * @brief Обновить переводы
+     */
+    void updateTranslations() override;
 
 private:
     class Implementation;

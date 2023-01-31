@@ -20,5 +20,16 @@
         <file>translations/translation_ro_RO.qm</file>
         <file>translations/translation_fa.qm</file>
         <file>translations/translation_gl_ES.qm</file>
+        <file>translations/translation_da_DK.qm</file>
+        <file>translations/translation_ca.qm</file>
+        <file>translations/translation_eo.qm</file>
+        <file>translations/translation_hr.qm</file>
+        <file>translations/translation_nl.qm</file>
+        <file>translations/translation_pt_PT.qm</file>
+        <file>translations/translation_tl_PH.qm</file>
+        <file>translations/translation_zh_CN.qm</file>
+        <file>translations/translation_ar.qm</file>
+        <file>translations/translation_ta.qm</file>
+        <file>translations/translation_ko.qm</file>
     </qresource>
 </RCC>

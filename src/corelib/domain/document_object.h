@@ -42,10 +42,29 @@ enum class DocumentObjectType {
     ScreenplaySeries = 10110,
     //
     ComicBook = 10200,
+    ComicBookTitlePage = 10201,
+    ComicBookSynopsis = 10202,
+    ComicBookText = 10203,
+    ComicBookDictionaries = 10204,
+    ComicBookStatistics = 10205,
     //
-    Novel = 10300,
+    Audioplay = 10300,
+    AudioplayTitlePage = 10301,
+    AudioplaySynopsis = 10302,
+    AudioplayText = 10303,
+    AudioplayDictionaries = 10304,
+    AudioplayStatistics = 10305,
     //
-    GameScript = 10400,
+    Stageplay = 10400,
+    StageplayTitlePage = 10401,
+    StageplaySynopsis = 10402,
+    StageplayText = 10403,
+    StageplayDictionaries = 10404,
+    StageplayStatistics = 10405,
+    //
+    Novel = 10500,
+    //
+    GameScript = 10600,
     //
     Plots = 20000,
     Plot = 20001,
@@ -60,10 +79,11 @@ enum class DocumentObjectType {
     World = 50001,
     //
     Folder = 100001,
-    Text = 100002,
+    SimpleText = 100002,
     MindMap = 100003,
     Image = 100004,
-    Link = 100005,
+    ImagesGallery = 100005,
+    Link = 100006,
 
     /**
     //    Item = 301,
@@ -97,7 +117,7 @@ QByteArray CORE_LIBRARY_EXPORT mimeTypeFor(DocumentObjectType _type);
 /**
  * @brief Получить тип объекта по майм-типу
  */
-DocumentObjectType CORE_LIBRARY_EXPORT typeFor(const QByteArray &_mime);
+DocumentObjectType CORE_LIBRARY_EXPORT typeFor(const QByteArray& _mime);
 
 /**
  * @brief Получить иконку по типу объекта
@@ -108,8 +128,8 @@ QString CORE_LIBRARY_EXPORT iconForType(DocumentObjectType _type);
  * @brief Изображение связанное с документом
  */
 struct DocumentImage {
-    QUuid uuid;
-    QPixmap image;
+    QUuid uuid = {};
+    QPixmap image = {};
 };
 
 /**
@@ -121,8 +141,8 @@ public:
     /**
      * @brief Уникальный идентификатор
      */
-    const QUuid &uuid() const;
-    void setUuid(const QUuid &_uuid);
+    const QUuid& uuid() const;
+    void setUuid(const QUuid& _uuid);
 
     /**
      * @brief Тип документа
@@ -133,12 +153,12 @@ public:
     /**
      * @brief Содержимое документа
      */
-    const QByteArray &content() const;
-    void setContent(const QByteArray &_content);
+    const QByteArray& content() const;
+    void setContent(const QByteArray& _content);
 
 private:
-    explicit DocumentObject(const Identifier &_id, const QUuid &_uuid, DocumentObjectType _type,
-                            const QByteArray &_content);
+    explicit DocumentObject(const Identifier& _id, const QUuid& _uuid, DocumentObjectType _type,
+                            const QByteArray& _content);
     friend class ObjectsBuilder;
 
     /**

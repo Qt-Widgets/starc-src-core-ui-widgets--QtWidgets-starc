@@ -1,8 +1,8 @@
 #pragma once
 
-#include <corelib_global.h>
-
 #include <QtGlobal>
+
+#include <corelib_global.h>
 
 class QColor;
 
@@ -38,5 +38,25 @@ public:
     /**
      * @brief Получить цвет рядом с заданым
      */
-    static QColor nearby(const QColor& _color);
+    static QColor nearby(const QColor& _color, int _f = 110);
+
+    /**
+     * @brief Сформировать строку из цвета
+     */
+    static QString toString(const QColor& _color);
+
+    /**
+     * @brief Сформировать цвет из строки
+     */
+    static QColor fromString(const QString& _colorName);
+
+    /**
+     * @brief Получить цветовой образ заданного текста
+     */
+    static QColor forText(const QString& _text);
+
+    /**
+     * @brief Получить цвет для заданного числа
+     */
+    static QColor forNumber(int _number);
 };

@@ -3,8 +3,9 @@
 #include <ui/widgets/widget/widget.h>
 
 
-namespace Ui
-{
+namespace Ui {
+
+class ThemeSetupView;
 
 /**
  * @brief Представление приложения
@@ -18,6 +19,26 @@ public:
     ~ApplicationView() override;
 
     /**
+     * @brief Получить виджет настройки темы
+     */
+    ThemeSetupView* themeSetupView() const;
+
+    /**
+     * @brief Получить виджет основного представления
+     */
+    QWidget* view() const;
+
+    /**
+     * @brief Выдвинуть представление
+     */
+    void slideViewOut();
+
+    /**
+     * @brief Задать доступность кнопки скрытия навигационной панели сплитера
+     */
+    void setHideNavigationButtonAvailable(bool _available);
+
+    /**
      * @brief Сохранить состояние
      */
     QVariantMap saveState() const;
@@ -25,7 +46,7 @@ public:
     /**
      * @brief Восстановить состояние
      */
-    void restoreState(const QVariantMap& _state);
+    void restoreState(bool _onboaringPassed, const QVariantMap& _state);
 
     /**
      * @brief Показать заданный контент
@@ -33,11 +54,16 @@ public:
     void showContent(QWidget* _toolbar, QWidget* _navigator, QWidget* _view);
 
     /**
-     * @brief Установить панель инструментов для работы с аккаунтом
+     * @brief Включить/отключить полноэкранный режим
      */
-    void setAccountBar(Widget* _accountBar);
+    void toggleFullScreen(bool _isFullScreen);
 
 signals:
+    /**
+     * @brief Запрос на выход из полноэкранного режима
+     */
+    void turnOffFullScreenRequested();
+
     /**
      * @brief Запрос на закрытие приложения
      */
@@ -45,14 +71,14 @@ signals:
 
 protected:
     /**
-     * @brief Корректируем расположение виджета личного кабинета внутри виджета представления
-     */
-    bool eventFilter(QObject* _target, QEvent* _event) override;
-
-    /**
      * @brief Переопределяем, чтобы вместо реального закрытия испустить сигнал о данном намерении
      */
     void closeEvent(QCloseEvent* _event) override;
+
+    /**
+     * @brief Обновить переводы
+     */
+    void updateTranslations() override;
 
     /**
      * @brief Обновляем навигатор при изменении дизайн системы

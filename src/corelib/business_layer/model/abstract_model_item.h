@@ -1,14 +1,13 @@
 #pragma once
 
-#include <corelib_global.h>
-
 #include <QScopedPointer>
+
+#include <corelib_global.h>
 
 class QVariant;
 
 
-namespace BusinessLayer
-{
+namespace BusinessLayer {
 
 /**
  * @brief Абстрактный класс элемента древовидной модели
@@ -29,26 +28,31 @@ public:
      * @brief Добавить элемент в начало
      */
     void prependItem(AbstractModelItem* _item);
+    void prependItems(const QVector<AbstractModelItem*>& _items);
 
     /**
      * @brief Добавить элемент в конец
      */
     void appendItem(AbstractModelItem* _item);
+    void appendItems(const QVector<AbstractModelItem*>& _items);
 
     /**
      * @brief Вставить элемент в указанное место
      */
     void insertItem(int _index, AbstractModelItem* _item);
+    void insertItems(int _index, const QVector<AbstractModelItem*>& _items);
 
     /**
      * @brief Удалить элемент
      */
     void removeItem(AbstractModelItem* _item);
+    void removeItems(int _fromIndex, int _toIndex);
 
     /**
      * @brief Извлечь элемент не удаляя его
      */
     void takeItem(AbstractModelItem* _item);
+    void takeItems(int _fromIndex, int _toIndex);
 
     /**
      * @brief Имеет ли элемент родительский элемент
@@ -64,6 +68,11 @@ public:
      * @brief Установить родительский элемент
      */
     void setParent(AbstractModelItem* _parent);
+
+    /**
+     * @brief Является ли элемент ребёнком заданного (рекурсивная проверка)
+     */
+    bool isChildOf(AbstractModelItem* _parent) const;
 
     /**
      * @brief Имеет ли элемент детей
@@ -96,11 +105,24 @@ public:
     bool isChanged() const;
     void setChanged(bool _changed);
 
+    /**
+     * @brief Подходит ли элемент под условия заданного фильтра
+     */
+    virtual bool isFilterAccepted(const QString& _text, bool _isCaseSensitive,
+                                  int _filterType) const;
+
 protected:
     /**
      * @brief Возможность обработки изменния для дочерних классов
      */
-    virtual void handleChange() {}
+    virtual void handleChange()
+    {
+        //
+        // TODO: добавить возможность указать причину изменения, чтобы наследники могли более гибко
+        // реагировать на него, например нет необходимости пересчитывать хронометраж, если не
+        // изменился текст или тип параграфа
+        //
+    }
 
 private:
     class Implementation;

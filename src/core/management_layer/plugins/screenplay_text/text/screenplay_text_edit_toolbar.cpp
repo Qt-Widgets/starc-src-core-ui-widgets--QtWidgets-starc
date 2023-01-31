@@ -1,17 +1,14 @@
 #include "screenplay_text_edit_toolbar.h"
 
 #include <ui/design_system/design_system.h>
-#include <ui/widgets/card/card.h>
-#include <ui/widgets/tree/tree.h>
+#include <ui/widgets/card/card_popup_with_tree.h>
 
 #include <QAbstractItemModel>
 #include <QAction>
 #include <QHBoxLayout>
-#include <QVariantAnimation>
 
 
-namespace Ui
-{
+namespace Ui {
 
 class ScreenplayTextEditToolbar::Implementation
 {
@@ -23,11 +20,6 @@ public:
      */
     void showPopup(ScreenplayTextEditToolbar* _parent);
 
-    /**
-     * @brief Скрыть попап
-     */
-    void hidePopup();
-
 
     QAction* undoAction = nullptr;
     QAction* redoAction = nullptr;
@@ -36,84 +28,43 @@ public:
     QAction* searchAction = nullptr;
     QAction* commentsAction = nullptr;
 
-    bool isPopupShown = false;
-    Card* popup = nullptr;
-    Tree* popupContent = nullptr;
-    QVariantAnimation popupHeightAnimation;
+    CardPopupWithTree* popup = nullptr;
 };
 
 ScreenplayTextEditToolbar::Implementation::Implementation(QWidget* _parent)
-    : undoAction(new QAction),
-      redoAction(new QAction),
-      paragraphTypeAction(new QAction),
-      fastFormatAction(new QAction),
-      searchAction(new QAction),
-      commentsAction(new QAction),
-      popup(new Card(_parent)),
-      popupContent(new Tree(popup))
+    : undoAction(new QAction(_parent))
+    , redoAction(new QAction(_parent))
+    , paragraphTypeAction(new QAction(_parent))
+    , fastFormatAction(new QAction(_parent))
+    , searchAction(new QAction(_parent))
+    , commentsAction(new QAction(_parent))
+    , popup(new CardPopupWithTree(_parent))
 {
-    popup->setWindowFlags(Qt::SplashScreen | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
-    popup->setAttribute(Qt::WA_Hover, false);
-    popup->setAttribute(Qt::WA_TranslucentBackground);
-    popup->setAttribute(Qt::WA_ShowWithoutActivating);
-    popup->hide();
-
-    popupContent->setRootIsDecorated(false);
-
-    auto popupLayout = new QHBoxLayout;
-    popupLayout->setMargin({});
-    popupLayout->setSpacing(0);
-    popupLayout->addWidget(popupContent);
-    popup->setLayoutReimpl(popupLayout);
-
-    popupHeightAnimation.setEasingCurve(QEasingCurve::OutQuint);
-    popupHeightAnimation.setDuration(240);
-    popupHeightAnimation.setStartValue(0);
-    popupHeightAnimation.setEndValue(0);
 }
 
 void ScreenplayTextEditToolbar::Implementation::showPopup(ScreenplayTextEditToolbar* _parent)
 {
-    if (popupContent->model() == nullptr) {
-        return;
-    }
+    const auto width = Ui::DesignSystem::floatingToolBar().spacing() * 2
+        + _parent->actionCustomWidth(paragraphTypeAction);
 
-    isPopupShown = true;
+    const auto left = QPoint(
+        _parent->isLeftToRight() ? (Ui::DesignSystem::floatingToolBar().shadowMargins().left()
+                                    + Ui::DesignSystem::floatingToolBar().margins().left()
+                                    + Ui::DesignSystem::floatingToolBar().iconSize().width() * 2
+                                    + Ui::DesignSystem::floatingToolBar().spacing()
+                                    - Ui::DesignSystem::card().shadowMargins().left())
+                                 : (Ui::DesignSystem::floatingToolBar().shadowMargins().left()
+                                    + Ui::DesignSystem::floatingToolBar().margins().left()
+                                    + Ui::DesignSystem::floatingToolBar().iconSize().width() * 3
+                                    + Ui::DesignSystem::floatingToolBar().spacing() * 2
+                                    - Ui::DesignSystem::card().shadowMargins().left()),
+        _parent->rect().bottom() - Ui::DesignSystem::floatingToolBar().shadowMargins().bottom());
+    const auto position = _parent->mapToGlobal(left)
+        + QPointF(Ui::DesignSystem::textField().margins().left(),
+                  -Ui::DesignSystem::textField().margins().bottom());
 
-    const auto popupWidth = Ui::DesignSystem::floatingToolBar().spacing() * 2
-                            + _parent->actionCustomWidth(paragraphTypeAction);
-    popup->resize(static_cast<int>(popupWidth), 0);
-
-    const auto left = QPoint(Ui::DesignSystem::floatingToolBar().shadowMargins().left()
-                             + Ui::DesignSystem::floatingToolBar().margins().left()
-                             + Ui::DesignSystem::floatingToolBar().iconSize().width() * 2
-                             + Ui::DesignSystem::floatingToolBar().spacing()
-                             - Ui::DesignSystem::card().shadowMargins().left(),
-                             _parent->rect().bottom()
-                             - Ui::DesignSystem::floatingToolBar().shadowMargins().bottom());
-    const auto pos = _parent->mapToGlobal(left)
-                     + QPointF(Ui::DesignSystem::textField().margins().left(),
-                               - Ui::DesignSystem::textField().margins().bottom());
-    popup->move(pos.toPoint());
-    popup->show();
-
-    popupContent->setScrollBarVisible(false);
-
-    popupHeightAnimation.setDirection(QVariantAnimation::Forward);
-    const auto itemsCount = popupContent->model()->rowCount();
-    const auto height = Ui::DesignSystem::treeOneLineItem().height() * itemsCount
-                        + Ui::DesignSystem::card().shadowMargins().top()
-                        + Ui::DesignSystem::card().shadowMargins().bottom();
-    popupHeightAnimation.setEndValue(static_cast<int>(height));
-    popupHeightAnimation.start();
-}
-
-void ScreenplayTextEditToolbar::Implementation::hidePopup()
-{
-    isPopupShown = false;
-
-    popupHeightAnimation.setDirection(QVariantAnimation::Backward);
-    popupHeightAnimation.start();
+    popup->showPopup(position.toPoint(), _parent->height(), width,
+                     popup->contentModel()->rowCount());
 }
 
 
@@ -121,9 +72,11 @@ void ScreenplayTextEditToolbar::Implementation::hidePopup()
 
 
 ScreenplayTextEditToolbar::ScreenplayTextEditToolbar(QWidget* _parent)
-    : FloatingToolBar(_parent),
-      d(new Implementation(this))
+    : FloatingToolBar(_parent)
+    , d(new Implementation(this))
 {
+    setCurtain(true);
+
     d->undoAction->setIconText(u8"\U000f054c");
     addAction(d->undoAction);
     connect(d->undoAction, &QAction::triggered, this, &ScreenplayTextEditToolbar::undoPressed);
@@ -136,23 +89,20 @@ ScreenplayTextEditToolbar::ScreenplayTextEditToolbar(QWidget* _parent)
     d->paragraphTypeAction->setIconText(u8"\U000f035d");
     addAction(d->paragraphTypeAction);
     connect(d->paragraphTypeAction, &QAction::triggered, this, [this] {
-        if (!d->isPopupShown) {
-            d->paragraphTypeAction->setIconText(u8"\U000f0360");
-            d->showPopup(this);
-        } else {
-            d->paragraphTypeAction->setIconText(u8"\U000f035d");
-            d->hidePopup();
-        }
+        d->paragraphTypeAction->setIconText(u8"\U000f0360");
+        d->showPopup(this);
     });
 
     d->fastFormatAction->setIconText(u8"\U000f0328");
     d->fastFormatAction->setCheckable(true);
     addAction(d->fastFormatAction);
-    connect(d->fastFormatAction, &QAction::toggled, this, &ScreenplayTextEditToolbar::updateTranslations);
-    connect(d->fastFormatAction, &QAction::toggled, this, &ScreenplayTextEditToolbar::fastFormatPanelVisibleChanged);
-    connect(d->fastFormatAction, &QAction::toggled, [this] (bool _checked) {
+    connect(d->fastFormatAction, &QAction::toggled, this, [this](bool _checked) {
+        updateTranslations();
+
         d->paragraphTypeAction->setVisible(!_checked);
         designSystemChangeEvent(nullptr);
+
+        emit fastFormatPanelVisibleChanged(_checked);
     });
 
     d->searchAction->setIconText(u8"\U000f0349");
@@ -163,47 +113,42 @@ ScreenplayTextEditToolbar::ScreenplayTextEditToolbar(QWidget* _parent)
     d->commentsAction->setIconText(u8"\U000f0e31");
     d->commentsAction->setCheckable(true);
     addAction(d->commentsAction);
-    connect(d->commentsAction, &QAction::toggled, this, &ScreenplayTextEditToolbar::updateTranslations);
-    connect(d->commentsAction, &QAction::toggled, this, &ScreenplayTextEditToolbar::commentsModeEnabledChanged);
+    connect(d->commentsAction, &QAction::toggled, this,
+            &ScreenplayTextEditToolbar::updateTranslations);
+    connect(d->commentsAction, &QAction::toggled, this,
+            &ScreenplayTextEditToolbar::commentsModeEnabledChanged);
 
-    connect(&d->popupHeightAnimation, &QVariantAnimation::valueChanged, this, [this] (const QVariant& _value) {
-        const auto height = _value.toInt();
-        d->popup->resize(d->popup->width(), height);
+    connect(d->popup, &CardPopupWithTree::currentIndexChanged, this,
+            [this](const QModelIndex& _index) { emit paragraphTypeChanged(_index); });
+    connect(d->popup, &Card::disappeared, this, [this] {
+        d->paragraphTypeAction->setIconText(u8"\U000f035d");
+        animateHoverOut();
     });
-    connect(&d->popupHeightAnimation, &QVariantAnimation::finished, this, [this] {
-        if (!d->isPopupShown) {
-            d->popup->hide();
-        }
-    });
-
-    connect(d->popupContent, &Tree::currentIndexChanged, this, [this] (const QModelIndex& _index) {
-        d->paragraphTypeAction->setText(_index.data().toString());
-        d->hidePopup();
-        update();
-
-        emit paragraphTypeChanged(_index);
-    });
-
-    updateTranslations();
-    designSystemChangeEvent(nullptr);
 }
 
 ScreenplayTextEditToolbar::~ScreenplayTextEditToolbar() = default;
 
+void ScreenplayTextEditToolbar::setReadOnly(bool _readOnly)
+{
+    const auto enabled = !_readOnly;
+    d->undoAction->setEnabled(enabled);
+    d->redoAction->setEnabled(enabled);
+    d->paragraphTypeAction->setEnabled(enabled);
+}
+
 void ScreenplayTextEditToolbar::setParagraphTypesModel(QAbstractItemModel* _model)
 {
-    if (d->popupContent->model() != nullptr) {
-        d->popupContent->model()->disconnect(this);
+    if (d->popup->contentModel() != nullptr) {
+        d->popup->contentModel()->disconnect(this);
     }
 
-    d->popupContent->setModel(_model);
+    d->popup->setContentModel(_model);
 
     if (_model != nullptr) {
-        connect(_model, &QAbstractItemModel::rowsInserted, this, [this] {
-            designSystemChangeEvent(nullptr);
-        });
+        connect(_model, &QAbstractItemModel::rowsInserted, this,
+                [this] { designSystemChangeEvent(nullptr); });
         if (_model->rowCount() > 0) {
-            d->popupContent->setCurrentIndex(_model->index(0, 0));
+            d->popup->setCurrentIndex(_model->index(0, 0));
         }
     }
 
@@ -221,7 +166,7 @@ void ScreenplayTextEditToolbar::setCurrentParagraphType(const QModelIndex& _inde
     QSignalBlocker blocker(this);
 
     d->paragraphTypeAction->setText(_index.data().toString());
-    d->popupContent->setCurrentIndex(_index);
+    d->popup->setCurrentIndex(_index);
 }
 
 void ScreenplayTextEditToolbar::setParagraphTypesEnabled(bool _enabled)
@@ -247,15 +192,17 @@ QString ScreenplayTextEditToolbar::searchIcon() const
 QPointF ScreenplayTextEditToolbar::searchIconPosition() const
 {
     const auto allActions = actions();
-    const auto visibleActionsSize = std::count_if(allActions.begin(), allActions.end(),
-                                                  [] (QAction* _action) { return _action->isVisible(); }) - 2;
+    const auto visibleActionsSize
+        = std::count_if(allActions.begin(), allActions.end(),
+                        [](QAction* _action) { return _action->isVisible(); })
+        - 2;
     qreal width = Ui::DesignSystem::floatingToolBar().shadowMargins().left()
-                  + Ui::DesignSystem::floatingToolBar().margins().left()
-                  + (Ui::DesignSystem::floatingToolBar().iconSize().width()
-                     + Ui::DesignSystem::floatingToolBar().spacing()) * visibleActionsSize;
-    for (const auto action : actions()) {
-        if (!action->isVisible()
-            || action->isSeparator()) {
+        + Ui::DesignSystem::floatingToolBar().margins().left()
+        + (Ui::DesignSystem::floatingToolBar().iconSize().width()
+           + Ui::DesignSystem::floatingToolBar().spacing())
+            * visibleActionsSize;
+    for (const auto action : allActions) {
+        if (!action->isVisible() || action->isSeparator()) {
             continue;
         }
 
@@ -267,7 +214,7 @@ QPointF ScreenplayTextEditToolbar::searchIconPosition() const
 
     return QPointF(width,
                    Ui::DesignSystem::floatingToolBar().shadowMargins().top()
-                   + Ui::DesignSystem::floatingToolBar().margins().top());
+                       + Ui::DesignSystem::floatingToolBar().margins().top());
 }
 
 bool ScreenplayTextEditToolbar::isCommentsModeEnabled() const
@@ -280,38 +227,45 @@ void ScreenplayTextEditToolbar::setCommentsModeEnabled(bool _enabled)
     d->commentsAction->setChecked(_enabled);
 }
 
-void ScreenplayTextEditToolbar::focusOutEvent(QFocusEvent* _event)
+bool ScreenplayTextEditToolbar::canAnimateHoverOut() const
 {
-    FloatingToolBar::focusOutEvent(_event);
-
-    d->paragraphTypeAction->setIconText(u8"\U000f035d");
-    d->hidePopup();
+    return !d->popup->isVisible();
 }
 
 void ScreenplayTextEditToolbar::updateTranslations()
 {
-    d->undoAction->setToolTip(tr("Undo last action") + QString(" (%1)").arg(QKeySequence(QKeySequence::Undo).toString(QKeySequence::NativeText)));
-    d->redoAction->setToolTip(tr("Redo last action") + QString(" (%1)").arg(QKeySequence(QKeySequence::Redo).toString(QKeySequence::NativeText)));
+    d->undoAction->setToolTip(
+        tr("Undo last action")
+        + QString(" (%1)").arg(
+            QKeySequence(QKeySequence::Undo).toString(QKeySequence::NativeText)));
+    d->redoAction->setToolTip(
+        tr("Redo last action")
+        + QString(" (%1)").arg(
+            QKeySequence(QKeySequence::Redo).toString(QKeySequence::NativeText)));
     d->paragraphTypeAction->setToolTip(tr("Current paragraph format"));
-    d->fastFormatAction->setToolTip(d->fastFormatAction->isChecked() ? tr("Hide fast format panel")
-                                                                     : tr("Show fast format panel"));
-    d->searchAction->setToolTip(tr("Search text") + QString(" (%1)").arg(QKeySequence(QKeySequence::Find).toString(QKeySequence::NativeText)));
+    d->fastFormatAction->setToolTip(d->fastFormatAction->isChecked()
+                                        ? tr("Hide fast format panel")
+                                        : tr("Show fast format panel"));
+    d->searchAction->setToolTip(
+        tr("Search text")
+        + QString(" (%1)").arg(
+            QKeySequence(QKeySequence::Find).toString(QKeySequence::NativeText)));
     d->commentsAction->setToolTip(d->commentsAction->isChecked() ? tr("Disable review mode")
-                                                             : tr("Enable review mode"));
+                                                                 : tr("Enable review mode"));
 }
 
 void ScreenplayTextEditToolbar::designSystemChangeEvent(DesignSystemChangeEvent* _event)
 {
     FloatingToolBar::designSystemChangeEvent(_event);
 
-    setActionCustomWidth(d->paragraphTypeAction,
-                   static_cast<int>(Ui::DesignSystem::treeOneLineItem().margins().left())
-                   + d->popupContent->sizeHintForColumn(0)
-                   + static_cast<int>(Ui::DesignSystem::treeOneLineItem().margins().right()));
+    setActionCustomWidth(
+        d->paragraphTypeAction,
+        static_cast<int>(Ui::DesignSystem::treeOneLineItem().margins().left())
+            + d->popup->sizeHintForColumn(0)
+            + static_cast<int>(Ui::DesignSystem::treeOneLineItem().margins().right()));
 
-    d->popup->setBackgroundColor(Ui::DesignSystem::color().primary());
-    d->popupContent->setBackgroundColor(Ui::DesignSystem::color().primary());
-    d->popupContent->setTextColor(Ui::DesignSystem::color().onPrimary());
+    d->popup->setBackgroundColor(Ui::DesignSystem::color().background());
+    d->popup->setTextColor(Ui::DesignSystem::color().onBackground());
 
     resize(sizeHint());
 }

@@ -10,17 +10,21 @@
 #include <QTextBlock>
 #include <QTimer>
 
-using BusinessLayer::ScreenplayParagraphType;
+using BusinessLayer::TextParagraphType;
 using Ui::ScreenplayTextEdit;
 
 
-namespace KeyProcessingLayer
-{
+namespace KeyProcessingLayer {
 
 TransitionHandler::TransitionHandler(Ui::ScreenplayTextEdit* _editor)
-    : StandardKeyHandler(_editor),
-      m_completerModel(new QStringListModel(_editor))
+    : StandardKeyHandler(_editor)
+    , m_completerModel(new QStringListModel(_editor))
 {
+}
+
+void TransitionHandler::prehandle()
+{
+    handleOther();
 }
 
 void TransitionHandler::handleEnter(QKeyEvent* _event)
@@ -60,7 +64,7 @@ void TransitionHandler::handleEnter(QKeyEvent* _event)
         if (_event != nullptr) { // ... чтобы таб не переводил на новую строку
             cursor.movePosition(QTextCursor::EndOfBlock);
             editor()->setTextCursor(cursor);
-            editor()->addParagraph(jumpForEnter(ScreenplayParagraphType::Transition));
+            editor()->addParagraph(jumpForEnter(TextParagraphType::Transition));
         }
     } else {
         //! Подстановщик закрыт
@@ -71,18 +75,17 @@ void TransitionHandler::handleEnter(QKeyEvent* _event)
             //
             // Удаляем всё, но оставляем стилем блока текущий
             //
-            editor()->addParagraph(ScreenplayParagraphType::Transition);
+            editor()->addParagraph(TextParagraphType::Transition);
         } else {
             //! Нет выделения
 
-            if (cursorBackwardText.isEmpty()
-                && cursorForwardText.isEmpty()) {
+            if (cursorBackwardText.isEmpty() && cursorForwardText.isEmpty()) {
                 //! Текст пуст
 
                 //
                 // Сменить стиль
                 //
-                editor()->setCurrentParagraphType(changeForEnter(ScreenplayParagraphType::Transition));
+                editor()->setCurrentParagraphType(changeForEnter(TextParagraphType::Transition));
             } else {
                 //! Текст не пуст
 
@@ -97,21 +100,21 @@ void TransitionHandler::handleEnter(QKeyEvent* _event)
                     //
                     // Вставим блок перехода перед собой
                     //
-                    editor()->addParagraph(ScreenplayParagraphType::Transition);
+                    editor()->addParagraph(TextParagraphType::Transition);
                 } else if (cursorForwardText.isEmpty()) {
                     //! В конце блока
 
                     //
                     // Вставляем блок и применяем ему стиль время и место
                     //
-                    editor()->addParagraph(jumpForEnter(ScreenplayParagraphType::Transition));
+                    editor()->addParagraph(jumpForEnter(TextParagraphType::Transition));
                 } else {
                     //! Внутри блока
 
                     //
                     // Вставляем блок и применяем ему стиль время и место
                     //
-                    editor()->addParagraph(ScreenplayParagraphType::SceneHeading);
+                    editor()->addParagraph(TextParagraphType::SceneHeading);
                 }
             }
         }
@@ -155,14 +158,13 @@ void TransitionHandler::handleTab(QKeyEvent*)
         } else {
             //! Нет выделения
 
-            if (cursorBackwardText.isEmpty()
-                && cursorForwardText.isEmpty()) {
+            if (cursorBackwardText.isEmpty() && cursorForwardText.isEmpty()) {
                 //! Текст пуст
 
                 //
                 // Сменить стиль
                 //
-                editor()->setCurrentParagraphType(changeForTab(ScreenplayParagraphType::Transition));
+                editor()->setCurrentParagraphType(changeForTab(TextParagraphType::Transition));
             } else {
                 //! Текст не пуст
 
@@ -183,7 +185,7 @@ void TransitionHandler::handleTab(QKeyEvent*)
                     //
                     // Вставить блок
                     //
-                    editor()->addParagraph(jumpForTab(ScreenplayParagraphType::Transition));
+                    editor()->addParagraph(jumpForTab(TextParagraphType::Transition));
                 } else {
                     //! Внутри блока
 
@@ -194,6 +196,20 @@ void TransitionHandler::handleTab(QKeyEvent*)
             }
         }
     }
+}
+
+void TransitionHandler::handleBackspace(QKeyEvent* _event)
+{
+    //
+    // Блокируем отображение подсказки при удалении текущего блока
+    //
+    if (editor()->textCursor().positionInBlock() == 0 && !editor()->textCursor().hasSelection()) {
+        m_completionAllowed = false;
+    }
+
+    StandardKeyHandler::handleBackspace(_event);
+
+    m_completionAllowed = true;
 }
 
 void TransitionHandler::handleOther(QKeyEvent*)
@@ -239,9 +255,14 @@ void TransitionHandler::handleInput(QInputMethodEvent* _event)
     complete(currentBlockText, cursorBackwardText);
 }
 
-void TransitionHandler::complete(const QString& _currentBlockText, const QString& _cursorBackwardText)
+void TransitionHandler::complete(const QString& _currentBlockText,
+                                 const QString& _cursorBackwardText)
 {
     Q_UNUSED(_cursorBackwardText)
+
+    if (!m_completionAllowed) {
+        return;
+    }
 
     //
     // Дополним текст
@@ -251,7 +272,7 @@ void TransitionHandler::complete(const QString& _currentBlockText, const QString
     // ... дополняем, когда цикл обработки событий выполнится, чтобы позиция курсора
     //     корректно определилась после изменения текста
     //
-    QTimer::singleShot(0, [this, _currentBlockText] {
+    QTimer::singleShot(0, editor(), [this, _currentBlockText] {
         editor()->complete(m_completerModel, _currentBlockText, 0);
     });
 }

@@ -3,8 +3,7 @@
 #include <QSortFilterProxyModel>
 
 
-namespace BusinessLayer
-{
+namespace BusinessLayer {
 
 /**
  * @brief Прокси модель для отображения структуры сценария в навигаторе
@@ -16,6 +15,11 @@ class ScreenplayTextStructureModel : public QSortFilterProxyModel
 public:
     explicit ScreenplayTextStructureModel(QObject* _parent = nullptr);
     ~ScreenplayTextStructureModel() override;
+
+    /**
+     * @brief Задать необходимость отображать биты
+     */
+    void showBeats(bool _show);
 
     /**
      * @brief Переопределяем, чтобы отлавливать модель сценария и сохранять её для дальнейшей работы

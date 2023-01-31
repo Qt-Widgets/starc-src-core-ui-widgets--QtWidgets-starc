@@ -7,11 +7,10 @@
 #include <QObject>
 
 
-namespace ManagementLayer
-{
+namespace ManagementLayer {
 
 /**
- * @brief Менеджер текста сценария
+ * @brief Менеджер структуры сценария
  */
 class MANAGER_PLUGIN_EXPORT ScreenplayTextStructureManager : public QObject, public IDocumentManager
 {
@@ -28,11 +27,16 @@ public:
      */
     /** @{ */
     QObject* asQObject() override;
-    void setModel(BusinessLayer::AbstractModel* _model) override;
-    QWidget* view() override;
-    QWidget* createView() override;
+    bool isNavigationManager() const override;
+    Ui::IDocumentView* view() override;
+    Ui::IDocumentView* view(BusinessLayer::AbstractModel* _model) override;
+    Ui::IDocumentView* secondaryView() override;
+    Ui::IDocumentView* secondaryView(BusinessLayer::AbstractModel* _model) override;
+    Ui::IDocumentView* createView(BusinessLayer::AbstractModel* _model) override;
+    void resetModels() override;
     void reconfigure(const QStringList& _changedSettingsKeys) override;
     void bind(IDocumentManager* _manager) override;
+    void setEditingMode(DocumentEditingMode _mode) override;
     /** @} */
 
 signals:
@@ -46,6 +50,11 @@ private:
      * @brief Выбрать в навигаторе элемент соответствующий заданному индексу в модели
      */
     Q_SLOT void setCurrentModelIndex(const QModelIndex& _index);
+
+    /**
+     * @brief Установить модель
+     */
+    void setModel(BusinessLayer::AbstractModel* _model);
 
 private:
     class Implementation;

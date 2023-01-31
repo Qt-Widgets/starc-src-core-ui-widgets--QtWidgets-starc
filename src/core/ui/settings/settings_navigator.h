@@ -1,21 +1,25 @@
 #pragma once
 
-#include <ui/widgets/widget/widget.h>
+#include <ui/widgets/stack_widget/stack_widget.h>
 
 
-namespace Ui
-{
+namespace Ui {
 
 /**
  * @brief Навигатор списка настроек
  */
-class SettingsNavigator : public Widget
+class SettingsNavigator : public StackWidget
 {
     Q_OBJECT
 
 public:
     explicit SettingsNavigator(QWidget* _parent = nullptr);
     ~SettingsNavigator() override;
+
+    /**
+     * @brief Показать основную страницу
+     */
+    void showDefaultPage();
 
 signals:
     /**
@@ -24,9 +28,19 @@ signals:
     void applicationPressed();
     void applicationUserInterfacePressed();
     void applicationSaveAndBackupsPressed();
+    void applicationTextEditingPressed();
     void componentsPressed();
+    void componentsSimpleTextPressed();
     void componentsScreenplayPressed();
+    void componentsComicBookPressed();
+    void componentsAudioplayPressed();
+    void componentsStageplayPressed();
     void shortcutsPressed();
+
+    /**
+     * @brief Пользователь хочет сбросить настройки до заводских
+     */
+    void resetToDefaultsPressed();
 
 protected:
     /**

@@ -19,9 +19,11 @@ public:
     void setDecorationIcon(const QString& _icon);
 
     /**
-     * @brief Задать текст отображаемый под декорацией
+     * @brief Задать всмомогательный текст отображаемый когда нет изображения, при наведении на
+     *        установленное изображение и для вопроса об удалении изображения
      */
-    void setDecorationText(const QString& _text);
+    void setSupportingText(const QString& _emptyImageText, const QString& _imageText,
+                           const QString& _clearImageQuestion);
 
     /**
      * @brief Задать подсказку для диалога обрезки изображения
@@ -33,6 +35,12 @@ public:
      */
     void setImage(const QPixmap& _image);
 
+    /**
+     * @brief Возможность редактирования изображения
+     */
+    bool isReadOnly() const;
+    void setReadOnly(bool _readOnly);
+
 signals:
     /**
      * @brief Изображение сменилось
@@ -40,6 +48,21 @@ signals:
     void imageChanged(const QPixmap& _image);
 
 protected:
+    /**
+     * @brief Получить список действий контекстного меню
+     */
+    virtual QVector<QAction*> contextMenuActions() const;
+
+    /**
+     * @brief Произвести обработку в наследниках на событие смены возможности редактирования
+     */
+    virtual void processReadOnlyChange();
+
+    /**
+     * @brief Переопределяем для реализации тултипа
+     */
+    bool event(QEvent* _event) override;
+
     /**
      * @brief Реализуем отрисовку
      */
@@ -53,7 +76,11 @@ protected:
     /**
      * @brief Реализуем эффекст отображения оверлея при наведении мыши
      */
+#if (QT_VERSION > QT_VERSION_CHECK(6, 0, 0))
+    void enterEvent(QEnterEvent* _event) override;
+#else
     void enterEvent(QEvent* _event) override;
+#endif
     void leaveEvent(QEvent* _event) override;
 
     /**
@@ -72,6 +99,11 @@ protected:
     /** @} */
 
     /**
+     * @brief При изменении цвета текста перенастраиваем анимацию иконки
+     */
+    void processTextColorChange() override;
+
+    /**
      * @brief Определяем переводы
      */
     void updateTranslations() override;
@@ -79,10 +111,9 @@ protected:
     /**
      * @brief Кореектируем размер постера
      */
-    void designSystemChangeEvent(DesignSystemChangeEvent *_event) override;
+    void designSystemChangeEvent(DesignSystemChangeEvent* _event) override;
 
 private:
     class Implementation;
     QScopedPointer<Implementation> d;
 };
-

@@ -2,30 +2,42 @@
 
 #include "structure_model_item.h"
 
+#include <business_layer/model/abstract_model_xml.h>
+#include <data_layer/storage/settings_storage.h>
+#include <data_layer/storage/storage_facade.h>
 #include <domain/document_object.h>
-
+#include <utils/diff_match_patch/diff_match_patch_controller.h>
+#include <utils/helpers/color_helper.h>
 #include <utils/helpers/text_helper.h>
+#include <utils/logging.h>
+#include <utils/tools/edit_distance.h>
 
 #include <QColor>
 #include <QDataStream>
 #include <QDomDocument>
+#include <QIODevice>
 #include <QMimeData>
 #include <QSet>
 
+#ifdef QT_DEBUG
+#define XML_CHECKS
+#endif
 
-namespace BusinessLayer
-{
+
+namespace BusinessLayer {
 
 namespace {
-    const char* kMimeType = "application/x-starc/document";
-    const QString kDocumentKey = QLatin1String("document");
-    const QString kItemKey = QLatin1String("item");
-    const QString kUuidAttribute = QLatin1String("uuid");
-    const QString kTypeAttribute = QLatin1String("type");
-    const QString kNameAttribute = QLatin1String("name");
-    const QString kColorAttribute = QLatin1String("color");
-    const QString kVisibleAttribute = QLatin1String("visible");
-}
+const char* kMimeType = "application/x-starc/document";
+const QLatin1String kDocumentKey("document");
+const QLatin1String kItemKey("item");
+const QLatin1String kVersionKey("version");
+const QLatin1String kUuidAttribute("uuid");
+const QLatin1String kTypeAttribute("type");
+const QLatin1String kNameAttribute("name");
+const QLatin1String kColorAttribute("color");
+const QLatin1String kVisibleAttribute("visible");
+const QLatin1String kReadOnlyAttribute("readonly");
+} // namespace
 
 class StructureModel::Implementation
 {
@@ -38,10 +50,20 @@ public:
     void buildModel(Domain::DocumentObject* _structure);
 
     /**
+     * @brief Построить элемент из заданной ноды xml документа
+     */
+    StructureModelItem* buildItem(const QDomElement& _node, StructureModelItem* _parent = nullptr);
+
+    /**
      * @brief Сформировать xml из данных модели
      */
     QByteArray toXml(Domain::DocumentObject* _structure) const;
 
+
+    /**
+     * @brief Является ли проект вновь созданным
+     */
+    bool isNewProject = false;
 
     /**
      * @brief Название текущего проекта
@@ -65,7 +87,8 @@ public:
 };
 
 StructureModel::Implementation::Implementation()
-    : rootItem(new StructureModelItem({}, Domain::DocumentObjectType::Undefined, {}, {}, true))
+    : rootItem(
+        new StructureModelItem({}, Domain::DocumentObjectType::Undefined, {}, {}, true, false))
 {
 }
 
@@ -75,22 +98,6 @@ void StructureModel::Implementation::buildModel(Domain::DocumentObject* _structu
         return;
     }
 
-    std::function<void(const QDomElement&, StructureModelItem*)> buildItem;
-    buildItem = [&buildItem] (const QDomElement& _node, StructureModelItem* _parent) {
-        auto item = new StructureModelItem(_node.attribute(kUuidAttribute),
-                                           Domain::typeFor(_node.attribute(kTypeAttribute).toUtf8()),
-                                           TextHelper::fromHtmlEscaped(_node.attribute(kNameAttribute)),
-                                           _node.attribute(kColorAttribute),
-                                           _node.attribute(kVisibleAttribute) == "true");
-        _parent->appendItem(item);
-
-        auto child = _node.firstChildElement();
-        while (!child.isNull()) {
-            buildItem(child, item);
-            child = child.nextSiblingElement();
-        }
-    };
-
     QDomDocument domDocument;
     domDocument.setContent(_structure->content());
     auto documentNode = domDocument.firstChildElement(kDocumentKey);
@@ -99,6 +106,56 @@ void StructureModel::Implementation::buildModel(Domain::DocumentObject* _structu
         buildItem(itemNode, rootItem);
         itemNode = itemNode.nextSiblingElement();
     }
+}
+
+StructureModelItem* StructureModel::Implementation::buildItem(const QDomElement& _node,
+                                                              StructureModelItem* _parent)
+{
+    //
+    // Формируем элемент структуры
+    //
+    const auto readOnly = false;
+    auto item = new StructureModelItem(QUuid::fromString(_node.attribute(kUuidAttribute)),
+                                       Domain::typeFor(_node.attribute(kTypeAttribute).toUtf8()),
+                                       TextHelper::fromHtmlEscaped(_node.attribute(kNameAttribute)),
+                                       ColorHelper::fromString(_node.attribute(kColorAttribute)),
+                                       _node.attribute(kVisibleAttribute) == "true", readOnly);
+    //
+    // ... вкладываем в родителя
+    //
+    if (_parent != nullptr) {
+        _parent->appendItem(item);
+    }
+
+    //
+    // ... определяем его
+    //
+    auto child = _node.firstChildElement();
+    while (!child.isNull()) {
+        //
+        // ... детей
+        //
+        if (child.tagName() == kItemKey) {
+            buildItem(child, item);
+        }
+        //
+        // ... и версии
+        //
+        else if (child.tagName() == kVersionKey) {
+            const auto versionNode = child.toElement();
+            const auto visible = true;
+            const auto readOnly = versionNode.hasAttribute(kReadOnlyAttribute)
+                && versionNode.attribute(kReadOnlyAttribute) == "true";
+            auto version = new StructureModelItem(
+                QUuid::fromString(versionNode.attribute(kUuidAttribute)), item->type(),
+                TextHelper::fromHtmlEscaped(versionNode.attribute(kNameAttribute)),
+                ColorHelper::fromString(versionNode.attribute(kColorAttribute)), visible, readOnly);
+            item->addVersion(version);
+        }
+        child = child.nextSiblingElement();
+    }
+
+    return item;
 }
 
 QByteArray StructureModel::Implementation::toXml(Domain::DocumentObject* _structure) const
@@ -112,31 +169,44 @@ QByteArray StructureModel::Implementation::toXml(Domain::DocumentObject* _struct
     //
 
     QByteArray xml = "<?xml version=\"1.0\"?>\n";
-    xml += QString("<%1 mime-type=\"%2\" version=\"1.0\">\n").arg(kDocumentKey, Domain::mimeTypeFor(_structure->type()));
+    xml += QString("<%1 mime-type=\"%2\" version=\"1.0\">\n")
+               .arg(kDocumentKey, Domain::mimeTypeFor(_structure->type()))
+               .toUtf8();
+    auto writeVersionXml = [&xml](StructureModelItem* _item) {
+        xml += QString("<%1 %2=\"%3\" %4=\"%5\" %6=\"%7\" %8=\"%9\"/>\n")
+                   .arg(kVersionKey, kUuidAttribute, _item->uuid().toString(), kNameAttribute,
+                        TextHelper::toHtmlEscaped(_item->name()), kColorAttribute,
+                        ColorHelper::toString(_item->color()), kReadOnlyAttribute,
+                        (_item->isReadOnly() ? "true" : "false"))
+                   .toUtf8();
+    };
     std::function<void(StructureModelItem*)> writeItemXml;
-    writeItemXml = [&xml, &writeItemXml] (StructureModelItem* _item) {
+    writeItemXml = [&xml, &writeItemXml, writeVersionXml](StructureModelItem* _item) {
         xml += QString("<%1 %2=\"%3\" %4=\"%5\" %6=\"%7\" %8=\"%9\" %10=\"%11\"")
-               .arg(kItemKey,
-                    kUuidAttribute, _item->uuid().toString(),
-                    kTypeAttribute, Domain::mimeTypeFor(_item->type()),
-                    kNameAttribute, TextHelper::toHtmlEscaped(_item->name()),
-                    kColorAttribute, _item->color().name(),
-                    kVisibleAttribute, (_item->visible() ? "true" : "false"));
-        if (!_item->hasChildren()) {
+                   .arg(kItemKey, kUuidAttribute, _item->uuid().toString(), kTypeAttribute,
+                        Domain::mimeTypeFor(_item->type()), kNameAttribute,
+                        TextHelper::toHtmlEscaped(_item->name()), kColorAttribute,
+                        ColorHelper::toString(_item->color()), kVisibleAttribute,
+                        (_item->isVisible() ? "true" : "false"))
+                   .toUtf8();
+        if (_item->versions().isEmpty() && !_item->hasChildren()) {
             xml += "/>\n";
             return;
         }
 
         xml += ">\n";
+        for (const auto version : _item->versions()) {
+            writeVersionXml(version);
+        }
         for (int childIndex = 0; childIndex < _item->childCount(); ++childIndex) {
             writeItemXml(_item->childAt(childIndex));
         }
-        xml += QString("</%1>\n").arg(kItemKey);
+        xml += QString("</%1>\n").arg(kItemKey).toUtf8();
     };
     for (int childIndex = 0; childIndex < rootItem->childCount(); ++childIndex) {
         writeItemXml(rootItem->childAt(childIndex));
     }
-    xml += QString("</%1>").arg(kDocumentKey);
+    xml += QString("</%1>").arg(kDocumentKey).toUtf8();
     return xml;
 }
 
@@ -145,12 +215,17 @@ QByteArray StructureModel::Implementation::toXml(Domain::DocumentObject* _struct
 
 
 StructureModel::StructureModel(QObject* _parent)
-    : AbstractModel({}, _parent),
-      d(new Implementation)
+    : AbstractModel({}, _parent)
+    , d(new Implementation)
 {
 }
 
 StructureModel::~StructureModel() = default;
+
+bool StructureModel::isNewProject() const
+{
+    return d->isNewProject;
+}
 
 void StructureModel::setProjectName(const QString& _name)
 {
@@ -158,76 +233,173 @@ void StructureModel::setProjectName(const QString& _name)
 }
 
 QModelIndex StructureModel::addDocument(Domain::DocumentObjectType _type, const QString& _name,
-    const QModelIndex& _parent, const QByteArray& _content)
+                                        const QModelIndex& _parent, const QByteArray& _content)
 {
     //
-    // ATTENTION: В ProjectManager::addScreenplay есть копипаста отсюда, быть внимательным при обновлении
+    // ATTENTION: В ProjectManager::addScreenplay есть копипаста отсюда, быть внимательным при
+    // обновлении
     //
 
     using namespace Domain;
 
-    auto createItem = [] (DocumentObjectType _type, const QString& _name) {
+    auto createItem = [](DocumentObjectType _type, const QString& _name) {
         auto uuid = QUuid::createUuid();
         const auto visible = true;
-        return new StructureModelItem(uuid, _type, _name, {}, visible);
+        const auto readOnly = false;
+        return new StructureModelItem(uuid, _type, _name, {}, visible, readOnly);
     };
 
     auto parentItem = itemForIndex(_parent);
 
     switch (_type) {
-        case DocumentObjectType::Project: {
-            appendItem(createItem(_type, d->projectName), parentItem, _content);
-            break;
+    case DocumentObjectType::Project: {
+        appendItem(createItem(_type, d->projectName), parentItem, _content);
+        break;
+    }
+
+    case DocumentObjectType::RecycleBin: {
+        appendItem(createItem(_type, tr("Recycle bin")), parentItem, _content);
+        break;
+    }
+
+    case DocumentObjectType::Screenplay: {
+        auto screenplayItem = createItem(DocumentObjectType::Screenplay,
+                                         !_name.isEmpty() ? _name : tr("Screenplay"));
+        appendItem(screenplayItem, parentItem);
+        appendItem(createItem(DocumentObjectType::ScreenplayTitlePage, tr("Title page")),
+                   screenplayItem);
+        auto synopsisItem = createItem(DocumentObjectType::ScreenplaySynopsis, tr("Synopsis"));
+        appendItem(synopsisItem, screenplayItem);
+        appendItem(createItem(DocumentObjectType::ScreenplayText, tr("Screenplay")),
+                   screenplayItem);
+        appendItem(createItem(DocumentObjectType::ScreenplayStatistics, tr("Statistics")),
+                   screenplayItem);
+        //
+        // Вставляем тритмент после всех документов, т.к. он является алиасом к документу сценария
+        // и чтобы его сконструировать, нужны другие документы
+        //
+        insertItem(createItem(DocumentObjectType::ScreenplayTreatment, tr("Treatment")),
+                   synopsisItem);
+        break;
+    }
+
+    case DocumentObjectType::ComicBook: {
+        auto comicBookItem = createItem(DocumentObjectType::ComicBook,
+                                        !_name.isEmpty() ? _name : tr("Comic book"));
+        appendItem(comicBookItem, parentItem);
+        appendItem(createItem(DocumentObjectType::ComicBookTitlePage, tr("Title page")),
+                   comicBookItem);
+        appendItem(createItem(DocumentObjectType::ComicBookSynopsis, tr("Synopsis")),
+                   comicBookItem);
+        appendItem(createItem(DocumentObjectType::ComicBookText, tr("Script")), comicBookItem);
+        appendItem(createItem(DocumentObjectType::ComicBookStatistics, tr("Statistics")),
+                   comicBookItem);
+        break;
+    }
+
+    case DocumentObjectType::Audioplay: {
+        auto audioplayItem
+            = createItem(DocumentObjectType::Audioplay, !_name.isEmpty() ? _name : tr("Audioplay"));
+        appendItem(audioplayItem, parentItem);
+        appendItem(createItem(DocumentObjectType::AudioplayTitlePage, tr("Title page")),
+                   audioplayItem);
+        appendItem(createItem(DocumentObjectType::AudioplaySynopsis, tr("Synopsis")),
+                   audioplayItem);
+        appendItem(createItem(DocumentObjectType::AudioplayText, tr("Script")), audioplayItem);
+        appendItem(createItem(DocumentObjectType::AudioplayStatistics, tr("Statistics")),
+                   audioplayItem);
+        break;
+    }
+
+    case DocumentObjectType::Stageplay: {
+        auto audioplayItem
+            = createItem(DocumentObjectType::Stageplay, !_name.isEmpty() ? _name : tr("Stageplay"));
+        appendItem(audioplayItem, parentItem);
+        appendItem(createItem(DocumentObjectType::StageplayTitlePage, tr("Title page")),
+                   audioplayItem);
+        appendItem(createItem(DocumentObjectType::StageplaySynopsis, tr("Synopsis")),
+                   audioplayItem);
+        appendItem(createItem(DocumentObjectType::StageplayText, tr("Script")), audioplayItem);
+        appendItem(createItem(DocumentObjectType::StageplayStatistics, tr("Statistics")),
+                   audioplayItem);
+        break;
+    }
+
+    case DocumentObjectType::Characters: {
+        appendItem(createItem(_type, tr("Characters")), parentItem, _content);
+        break;
+    }
+    case DocumentObjectType::Character: {
+        parentItem = itemForType(Domain::DocumentObjectType::Characters);
+        Q_ASSERT(parentItem);
+        appendItem(createItem(_type, _name.toUpper()), parentItem, _content);
+
+        //
+        // Обновляем родителя, т.к. у него видмость зависит от наличия детей
+        //
+        updateItem(parentItem);
+
+        break;
+    }
+
+    case DocumentObjectType::Locations: {
+        appendItem(createItem(_type, tr("Locations")), parentItem, _content);
+        break;
+    }
+    case DocumentObjectType::Location: {
+        parentItem = itemForType(Domain::DocumentObjectType::Locations);
+        Q_ASSERT(parentItem);
+        appendItem(createItem(_type, _name.toUpper()), parentItem, _content);
+
+        //
+        // Обновляем родителя, т.к. у него видмость зависит от наличия детей
+        //
+        updateItem(parentItem);
+
+        break;
+    }
+
+    case DocumentObjectType::Worlds: {
+        appendItem(createItem(_type, tr("Worlds")), parentItem, _content);
+        break;
+    }
+    case DocumentObjectType::World: {
+        //
+        // FIXME: SAD-811 выпилить в версии 0.5.0
+        //
+        auto worldsItem = itemForType(Domain::DocumentObjectType::Worlds);
+        if (worldsItem == nullptr) {
+            appendItem(createItem(Domain::DocumentObjectType::Worlds, tr("Worlds")), parentItem);
         }
 
-        case DocumentObjectType::RecycleBin: {
-            appendItem(createItem(_type, tr("Recycle bin")), parentItem, _content);
-            break;
-        }
+        parentItem = itemForType(Domain::DocumentObjectType::Worlds);
+        Q_ASSERT(parentItem);
+        appendItem(createItem(_type, _name.toUpper()), parentItem, _content);
 
-        case DocumentObjectType::Screenplay: {
-            auto screenplayItem = createItem(DocumentObjectType::Screenplay, !_name.isEmpty() ? _name : tr("Screenplay"));
-            appendItem(screenplayItem, parentItem);
-            appendItem(createItem(DocumentObjectType::ScreenplayTitlePage, tr("Title page")), screenplayItem);
-            appendItem(createItem(DocumentObjectType::ScreenplaySynopsis, tr("Synopsis")), screenplayItem);
-            appendItem(createItem(DocumentObjectType::ScreenplayTreatment, tr("Treatment")), screenplayItem);
-            appendItem(createItem(DocumentObjectType::ScreenplayText, tr("Screenplay")), screenplayItem);
-            appendItem(createItem(DocumentObjectType::ScreenplayStatistics, tr("Statistics")), screenplayItem);
-            break;
-        }
+        //
+        // Обновляем родителя, т.к. у него видмость зависит от наличия детей
+        //
+        updateItem(parentItem);
 
-        case DocumentObjectType::Characters: {
-            appendItem(createItem(_type, tr("Characters")), parentItem, _content);
-            break;
-        }
-        case DocumentObjectType::Character: {
-            parentItem = itemForType(Domain::DocumentObjectType::Characters);
-            Q_ASSERT(parentItem);
-            appendItem(createItem(_type, _name.toUpper()), parentItem, _content);
-            break;
-        }
+        break;
+    }
 
-        case DocumentObjectType::Locations: {
-            appendItem(createItem(_type, tr("Locations")), parentItem, _content);
-            break;
-        }
-        case DocumentObjectType::Location: {
-            parentItem = itemForType(Domain::DocumentObjectType::Locations);
-            Q_ASSERT(parentItem);
-            appendItem(createItem(_type, _name.toUpper()), parentItem, _content);
-            break;
-        }
+    case DocumentObjectType::Folder:
+    case DocumentObjectType::SimpleText: {
+        appendItem(createItem(_type, _name), parentItem, _content);
+        break;
+    }
 
-        case DocumentObjectType::Folder:
-        case DocumentObjectType::Text: {
-            appendItem(createItem(_type, _name), parentItem, _content);
-            break;
-        }
+    case DocumentObjectType::ImagesGallery: {
+        appendItem(createItem(_type, !_name.isEmpty() ? _name : tr("Images gallery")), parentItem,
+                   _content);
+        break;
+    }
 
-        default: {
-            Q_ASSERT(false);
-            break;
-        }
+    default: {
+        Q_ASSERT(false);
+        break;
+    }
     }
 
     //
@@ -237,7 +409,8 @@ QModelIndex StructureModel::addDocument(Domain::DocumentObjectType _type, const 
     return index(parentItem->childCount() - indexDelta, 0, indexForItem(parentItem));
 }
 
-void StructureModel::prependItem(StructureModelItem* _item, StructureModelItem* _parentItem)
+void StructureModel::prependItem(StructureModelItem* _item, StructureModelItem* _parentItem,
+                                 const QByteArray& _content)
 {
     if (_item == nullptr) {
         return;
@@ -256,10 +429,12 @@ void StructureModel::prependItem(StructureModelItem* _item, StructureModelItem* 
     beginInsertRows(parentIndex, itemRowIndex, itemRowIndex);
     _parentItem->prependItem(_item);
     endInsertRows();
+
+    emit documentAdded(_item->uuid(), _parentItem->uuid(), _item->type(), _item->name(), _content);
 }
 
 void StructureModel::appendItem(StructureModelItem* _item, StructureModelItem* _parentItem,
-    const QByteArray& _content)
+                                const QByteArray& _content)
 {
     if (_item == nullptr) {
         return;
@@ -278,8 +453,7 @@ void StructureModel::appendItem(StructureModelItem* _item, StructureModelItem* _
     // для этого определим смещение по индексу для добавляемого элемента
     //
     int recycleBinDelta = 0;
-    if (_parentItem == d->rootItem
-        && _parentItem->hasChildren()
+    if (_parentItem == d->rootItem && _parentItem->hasChildren()
         && _parentItem->childAt(_parentItem->childCount() - 1)->type()
             == Domain::DocumentObjectType::RecycleBin) {
         recycleBinDelta = -1;
@@ -297,10 +471,10 @@ void StructureModel::appendItem(StructureModelItem* _item, StructureModelItem* _
     emit documentAdded(_item->uuid(), _parentItem->uuid(), _item->type(), _item->name(), _content);
 }
 
-void StructureModel::insertItem(StructureModelItem* _item, StructureModelItem* _afterSiblingItem)
+void StructureModel::insertItem(StructureModelItem* _item, StructureModelItem* _afterSiblingItem,
+                                const QByteArray& _content)
 {
-    if (_item == nullptr
-        || _afterSiblingItem == nullptr
+    if (_item == nullptr || _afterSiblingItem == nullptr
         || _afterSiblingItem->parent() == nullptr) {
         return;
     }
@@ -316,12 +490,13 @@ void StructureModel::insertItem(StructureModelItem* _item, StructureModelItem* _
     beginInsertRows(parentIndex, itemRowIndex, itemRowIndex);
     parent->insertItem(itemRowIndex, _item);
     endInsertRows();
+
+    emit documentAdded(_item->uuid(), parent->uuid(), _item->type(), _item->name(), _content);
 }
 
 void StructureModel::moveItem(StructureModelItem* _item, StructureModelItem* _parentItem)
 {
-    if (_item == nullptr
-        || _parentItem == nullptr) {
+    if (_item == nullptr || _parentItem == nullptr) {
         return;
     }
 
@@ -333,16 +508,16 @@ void StructureModel::moveItem(StructureModelItem* _item, StructureModelItem* _pa
     const auto itemIndex = indexForItem(_item);
     const auto sourceParentIndex = indexForItem(sourceParent);
     const auto destinationIndex = indexForItem(_parentItem);
-    beginMoveRows(sourceParentIndex, itemIndex.row(), itemIndex.row(), destinationIndex, _parentItem->childCount());
+    beginMoveRows(sourceParentIndex, itemIndex.row(), itemIndex.row(), destinationIndex,
+                  _parentItem->childCount());
     sourceParent->takeItem(_item);
     _parentItem->appendItem(_item);
     endMoveRows();
 }
 
-void StructureModel::removeItem(StructureModelItem* _item)
+void StructureModel::takeItem(StructureModelItem* _item)
 {
-    if (_item == nullptr
-        || _item->parent() == nullptr) {
+    if (_item == nullptr || _item->parent() == nullptr) {
         return;
     }
 
@@ -350,14 +525,30 @@ void StructureModel::removeItem(StructureModelItem* _item)
     const QModelIndex itemParentIndex = indexForItem(_item).parent();
     const int itemRowIndex = itemParent->rowOfChild(_item);
     beginRemoveRows(itemParentIndex, itemRowIndex, itemRowIndex);
+    itemParent->takeItem(_item);
+    endRemoveRows();
+}
+
+void StructureModel::removeItem(StructureModelItem* _item)
+{
+    if (_item == nullptr || _item->parent() == nullptr) {
+        return;
+    }
+
+    auto itemParent = _item->parent();
+    const QModelIndex itemParentIndex = indexForItem(_item).parent();
+    const int itemRowIndex = itemParent->rowOfChild(_item);
+    beginRemoveRows(itemParentIndex, itemRowIndex, itemRowIndex);
+
+    emit documentAboutToBeRemoved(_item->uuid());
+
     itemParent->removeItem(_item);
     endRemoveRows();
 }
 
 void StructureModel::updateItem(StructureModelItem* _item)
 {
-    if (_item == nullptr
-        || _item->parent() == nullptr) {
+    if (_item == nullptr || _item->parent() == nullptr) {
         return;
     }
 
@@ -367,10 +558,7 @@ void StructureModel::updateItem(StructureModelItem* _item)
 
 QModelIndex StructureModel::index(int _row, int _column, const QModelIndex& _parent) const
 {
-    if (_row < 0
-        || _row > rowCount(_parent)
-        || _column < 0
-        || _column > columnCount(_parent)
+    if (_row < 0 || _row > rowCount(_parent) || _column < 0 || _column > columnCount(_parent)
         || (_parent.isValid() && (_parent.column() != 0))) {
         return {};
     }
@@ -394,8 +582,7 @@ QModelIndex StructureModel::parent(const QModelIndex& _child) const
 
     auto childItem = itemForIndex(_child);
     auto parentItem = childItem->parent();
-    if (parentItem == nullptr
-        || parentItem == d->rootItem) {
+    if (parentItem == nullptr || parentItem == d->rootItem) {
         return {};
     }
 
@@ -416,8 +603,7 @@ int StructureModel::columnCount(const QModelIndex& _parent) const
 
 int StructureModel::rowCount(const QModelIndex& _parent) const
 {
-    if (_parent.isValid()
-        && _parent.column() != 0) {
+    if (_parent.isValid() && _parent.column() != 0) {
         return 0;
     }
 
@@ -434,47 +620,65 @@ Qt::ItemFlags StructureModel::flags(const QModelIndex& _index) const
     const auto item = itemForIndex(_index);
     const auto defaultFlags = Qt::ItemIsEnabled | Qt::ItemIsSelectable;
     switch (item->type()) {
-        //
-        // Элемент можно перемещать и вставлять внутрь другие
-        //
-        case Domain::DocumentObjectType::Screenplay:
-        case Domain::DocumentObjectType::Character:
-        case Domain::DocumentObjectType::Location:
-        case Domain::DocumentObjectType::Folder: {
-            return defaultFlags | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled;
-        }
+    //
+    // Элемент можно перемещать и вставлять внутрь другие
+    //
+    case Domain::DocumentObjectType::Screenplay:
+    case Domain::DocumentObjectType::ComicBook:
+    case Domain::DocumentObjectType::Audioplay:
+    case Domain::DocumentObjectType::Stageplay:
+    case Domain::DocumentObjectType::Character:
+    case Domain::DocumentObjectType::Location:
+    case Domain::DocumentObjectType::World:
+    case Domain::DocumentObjectType::Folder: {
+        return defaultFlags | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled;
+    }
 
-        //
-        // В элемент можно только вставлять другие
-        //
-        case Domain::DocumentObjectType::Project:
-        case Domain::DocumentObjectType::RecycleBin:
-        case Domain::DocumentObjectType::Characters:
-        case Domain::DocumentObjectType::Locations: {
-            return defaultFlags | Qt::ItemIsDropEnabled;
-        }
+    //
+    // В элемент можно только вставлять другие
+    //
+    case Domain::DocumentObjectType::Project:
+    case Domain::DocumentObjectType::RecycleBin:
+    case Domain::DocumentObjectType::Characters:
+    case Domain::DocumentObjectType::Locations:
+    case Domain::DocumentObjectType::Worlds: {
+        return defaultFlags | Qt::ItemIsDropEnabled;
+    }
 
-        //
-        // Элемент можно только перемещать
-        //
-        case Domain::DocumentObjectType::Text: {
-            return defaultFlags | Qt::ItemIsDragEnabled;
-        }
+    //
+    // Элемент можно только перемещать
+    //
+    case Domain::DocumentObjectType::SimpleText:
+    case Domain::DocumentObjectType::ImagesGallery: {
+        return defaultFlags | Qt::ItemIsDragEnabled;
+    }
 
-        //
-        // Элемент нельзя ни перемещать ни вставлять внутрь другие
-        //
-        case Domain::DocumentObjectType::ScreenplayTitlePage:
-        case Domain::DocumentObjectType::ScreenplaySynopsis:
-        case Domain::DocumentObjectType::ScreenplayTreatment:
-        case Domain::DocumentObjectType::ScreenplayText:
-        case Domain::DocumentObjectType::ScreenplayStatistics: {
-            return defaultFlags;
-        }
+    //
+    // Элемент нельзя ни перемещать ни вставлять внутрь в другие
+    //
+    case Domain::DocumentObjectType::ScreenplayTitlePage:
+    case Domain::DocumentObjectType::ScreenplaySynopsis:
+    case Domain::DocumentObjectType::ScreenplayTreatment:
+    case Domain::DocumentObjectType::ScreenplayText:
+    case Domain::DocumentObjectType::ScreenplayStatistics:
+    case Domain::DocumentObjectType::ComicBookTitlePage:
+    case Domain::DocumentObjectType::ComicBookSynopsis:
+    case Domain::DocumentObjectType::ComicBookText:
+    case Domain::DocumentObjectType::ComicBookStatistics:
+    case Domain::DocumentObjectType::AudioplayTitlePage:
+    case Domain::DocumentObjectType::AudioplaySynopsis:
+    case Domain::DocumentObjectType::AudioplayText:
+    case Domain::DocumentObjectType::AudioplayStatistics:
+    case Domain::DocumentObjectType::StageplayTitlePage:
+    case Domain::DocumentObjectType::StageplaySynopsis:
+    case Domain::DocumentObjectType::StageplayText:
+    case Domain::DocumentObjectType::StageplayStatistics: {
+        return defaultFlags;
+    }
 
-        default: {
-            return Qt::ItemIsDropEnabled;
-        }
+    default: {
+        return Qt::ItemIsDropEnabled;
+    }
     }
 }
 
@@ -487,7 +691,8 @@ QVariant StructureModel::data(const QModelIndex& _index, int _role) const
     //
     // Кастомные данные модели
     //
-    if (static_cast<StructureModelDataRole>(_role) == StructureModelDataRole::IsNavigatorAvailable) {
+    if (static_cast<StructureModelDataRole>(_role)
+        == StructureModelDataRole::IsNavigatorAvailable) {
         return d->navigatorAvailableIndexes.contains(_index);
     }
 
@@ -504,7 +709,7 @@ QVariant StructureModel::data(const QModelIndex& _index, int _role) const
 }
 
 bool StructureModel::canDropMimeData(const QMimeData* _data, Qt::DropAction _action, int _row,
-    int _column, const QModelIndex& _parent) const
+                                     int _column, const QModelIndex& _parent) const
 {
     Q_UNUSED(_action)
     Q_UNUSED(_row)
@@ -517,33 +722,8 @@ bool StructureModel::canDropMimeData(const QMimeData* _data, Qt::DropAction _act
         return false;
     }
 
-    //
-    // Обработка конкретных случаев что куда можно бросать
-    //
-    const auto dropTarget = itemForIndex(_parent);
-    switch (dropTarget->type()) {
-        case Domain::DocumentObjectType::Screenplay: {
-            return false;
-        }
-
-        //
-        // Во всех остальных случаях можно
-        //
-        default: {
-            return true;
-        }
-    }
-}
-
-bool StructureModel::dropMimeData(const QMimeData* _data, Qt::DropAction _action, int _row,
-    int _column, const QModelIndex& _parent)
-{
-    if (!canDropMimeData(_data, _action, _row, _column, _parent)) {
+    if (d->lastMimeItems.isEmpty()) {
         return false;
-    }
-
-    if (_action == Qt::IgnoreAction) {
-        return true;
     }
 
     //
@@ -566,7 +746,93 @@ bool StructureModel::dropMimeData(const QMimeData* _data, Qt::DropAction _action
     }
 
     //
-    // Если с данными всё окей, то перемещаем все элементы по очереди
+    // Смотрим, что за данные перемещаются
+    //
+    bool hasCharacters = false;
+    bool hasLocations = false;
+    bool hasWorlds = false;
+    for (const auto item : std::as_const(d->lastMimeItems)) {
+        switch (item->type()) {
+        case Domain::DocumentObjectType::Character: {
+            hasCharacters = true;
+            break;
+        }
+
+        case Domain::DocumentObjectType::Location: {
+            hasLocations = true;
+            break;
+        }
+
+        case Domain::DocumentObjectType::World: {
+            hasWorlds = true;
+            break;
+        }
+
+        default: {
+            break;
+        }
+        }
+    }
+
+    //
+    // Обработка конкретных случаев что куда можно бросать
+    //
+    const auto dropTarget = itemForIndex(_parent);
+    //
+    // ... eсли среди перемещаемых есть хотя бы два из трёх особенных, то запрещаем перемещение
+    //
+    if (hasCharacters + hasLocations + hasWorlds > 1) {
+        return false;
+    }
+    //
+    // ... персонажей и локации можно перетаскивать только внутри родительского элемента
+    //
+    else if (hasCharacters) {
+        return dropTarget->type() == Domain::DocumentObjectType::Characters
+            || dropTarget->type() == Domain::DocumentObjectType::RecycleBin;
+    } else if (hasLocations) {
+        return dropTarget->type() == Domain::DocumentObjectType::Locations
+            || dropTarget->type() == Domain::DocumentObjectType::RecycleBin;
+    } else if (hasWorlds) {
+        return dropTarget->type() == Domain::DocumentObjectType::Worlds
+            || dropTarget->type() == Domain::DocumentObjectType::RecycleBin;
+    }
+    //
+    // ... остальные случаи
+    //
+    switch (dropTarget->type()) {
+    //
+    // ... внутрь сценария ничего нельзя вложить
+    //
+    case Domain::DocumentObjectType::Screenplay:
+    case Domain::DocumentObjectType::ComicBook:
+    case Domain::DocumentObjectType::Audioplay:
+    case Domain::DocumentObjectType::Stageplay: {
+        return false;
+    }
+
+    //
+    // Во всех остальных случаях можно
+    //
+    default: {
+        return true;
+    }
+    }
+}
+
+bool StructureModel::dropMimeData(const QMimeData* _data, Qt::DropAction _action, int _row,
+                                  int _column, const QModelIndex& _parent)
+{
+    if (!canDropMimeData(_data, _action, _row, _column, _parent)) {
+        return false;
+    }
+
+    if (_action == Qt::IgnoreAction) {
+        return true;
+    }
+
+    //
+    // Перемещаем все элементы по очереди
     //
 
     auto parentItem = itemForIndex(_parent);
@@ -574,8 +840,7 @@ bool StructureModel::dropMimeData(const QMimeData* _data, Qt::DropAction _action
     //
     // Добавляем после всех элементов выбранного
     //
-    if (_row == -1
-        || _row == parentItem->childCount()) {
+    if (_row == -1 || _row == parentItem->childCount()) {
         //
         // Если вставляем перед корзиной, то добавляем дельту
         //
@@ -590,11 +855,11 @@ bool StructureModel::dropMimeData(const QMimeData* _data, Qt::DropAction _action
                 continue;
             }
 
-            emit beginMoveRows(itemIndex.parent(), itemIndex.row(), itemIndex.row(),
-                               _parent, parentItem->childCount() + recycleBinIndexDelta);
+            beginMoveRows(itemIndex.parent(), itemIndex.row(), itemIndex.row(), _parent,
+                          parentItem->childCount() + recycleBinIndexDelta);
             item->parent()->takeItem(item);
             parentItem->insertItem(parentItem->childCount() + recycleBinIndexDelta, item);
-            emit endMoveRows();
+            endMoveRows();
         }
     }
     //
@@ -621,11 +886,11 @@ bool StructureModel::dropMimeData(const QMimeData* _data, Qt::DropAction _action
                 continue;
             }
 
-            emit beginMoveRows(itemIndex.parent(), itemIndex.row(), itemIndex.row(),
-                               insertBeforeItemIndex.parent(), _row);
+            beginMoveRows(itemIndex.parent(), itemIndex.row(), itemIndex.row(),
+                          insertBeforeItemIndex.parent(), _row);
             item->parent()->takeItem(item);
             parentItem->insertItem(parentItem->rowOfChild(insertBeforeItem), item);
-            emit endMoveRows();
+            endMoveRows();
         }
     }
 
@@ -652,41 +917,41 @@ QMimeData* StructureModel::mimeData(const QModelIndexList& _indexes) const
     // ... и упорядочиваем его
     //
     std::sort(d->lastMimeItems.begin(), d->lastMimeItems.end(),
-              [] (StructureModelItem* _lhs, StructureModelItem* _rhs) {
-        //
-        // Для элементов находящихся на одном уровне сравниваем их позиции
-        //
-        if (_lhs->parent() == _rhs->parent()) {
-            return _lhs->parent()->rowOfChild(_lhs) < _rhs->parent()->rowOfChild(_rhs);
-        }
+              [](StructureModelItem* _lhs, StructureModelItem* _rhs) {
+                  //
+                  // Для элементов находящихся на одном уровне сравниваем их позиции
+                  //
+                  if (_lhs->parent() == _rhs->parent()) {
+                      return _lhs->parent()->rowOfChild(_lhs) < _rhs->parent()->rowOfChild(_rhs);
+                  }
 
-        //
-        // Для разноуровневых элементов определяем путь до верха и сравниваем пути
-        //
-        auto buildPath = [] (StructureModelItem* _item) {
-            QString path;
-            auto child = _item;
-            auto parent = child->parent();
-            while (parent != nullptr) {
-                path.prepend(QString("0000%1").arg(parent->rowOfChild(child)).right(5));
-                child = parent;
-                parent = child->parent();
-            }
-            return path;
-        };
-        return buildPath(_lhs) < buildPath(_rhs);
-    });
+                  //
+                  // Для разноуровневых элементов определяем путь до верха и сравниваем пути
+                  //
+                  auto buildPath = [](StructureModelItem* _item) {
+                      QString path;
+                      auto child = _item;
+                      auto parent = child->parent();
+                      while (parent != nullptr) {
+                          path.prepend(QString("0000%1").arg(parent->rowOfChild(child)).right(5));
+                          child = parent;
+                          parent = child->parent();
+                      }
+                      return path;
+                  };
+                  return buildPath(_lhs) < buildPath(_rhs);
+              });
 
     //
     // Помещаем индексы перемещаемых элементов в майм
     //
     QByteArray encodedData;
     QDataStream stream(&encodedData, QIODevice::WriteOnly);
-    for (const auto& item : d->lastMimeItems) {
+    for (const auto& item : std::as_const(d->lastMimeItems)) {
         stream << item->uuid();
     }
 
-    QMimeData *mimeData = new QMimeData();
+    QMimeData* mimeData = new QMimeData();
     mimeData->setData(kMimeType, encodedData);
     return mimeData;
 }
@@ -706,6 +971,24 @@ Qt::DropActions StructureModel::supportedDropActions() const
     return Qt::MoveAction;
 }
 
+QModelIndex StructureModel::indexForItem(StructureModelItem* _item) const
+{
+    if (_item == nullptr) {
+        return {};
+    }
+
+    int row = 0;
+    QModelIndex parent;
+    if (_item->hasParent() && _item->parent()->hasParent()) {
+        row = _item->parent()->rowOfChild(_item);
+        parent = indexForItem(_item->parent());
+    } else {
+        row = d->rootItem->rowOfChild(_item);
+    }
+
+    return index(row, 0, parent);
+}
+
 StructureModelItem* StructureModel::itemForIndex(const QModelIndex& _index) const
 {
     if (!_index.isValid()) {
@@ -723,11 +1006,18 @@ StructureModelItem* StructureModel::itemForIndex(const QModelIndex& _index) cons
 StructureModelItem* StructureModel::itemForUuid(const QUuid& _uuid) const
 {
     std::function<StructureModelItem*(StructureModelItem*)> search;
-    search = [&search, _uuid] (StructureModelItem* _parent) -> StructureModelItem* {
+    search = [&search, _uuid](StructureModelItem* _parent) -> StructureModelItem* {
         for (int itemRow = 0; itemRow < _parent->childCount(); ++itemRow) {
             auto item = _parent->childAt(itemRow);
             if (item->uuid() == _uuid) {
                 return item;
+            }
+
+            const auto versions = item->versions();
+            for (auto version : versions) {
+                if (version->uuid() == _uuid) {
+                    return version;
+                }
             }
 
             auto childItem = search(item);
@@ -796,6 +1086,17 @@ void StructureModel::setItemName(StructureModelItem* _item, const QString& _name
     emit dataChanged(itemIndex, itemIndex);
 }
 
+void StructureModel::setItemColor(StructureModelItem* _item, const QColor& _color)
+{
+    if (_item == nullptr) {
+        return;
+    }
+
+    const auto itemIndex = indexForItem(_item);
+    _item->setColor(_color);
+    emit dataChanged(itemIndex, itemIndex);
+}
+
 void StructureModel::setItemVisible(StructureModelItem* _item, bool _visible)
 {
     if (_item == nullptr) {
@@ -804,6 +1105,48 @@ void StructureModel::setItemVisible(StructureModelItem* _item, bool _visible)
 
     const auto itemIndex = indexForItem(_item);
     _item->setVisible(_visible);
+    emit dataChanged(itemIndex, itemIndex);
+}
+
+void StructureModel::addItemVersion(StructureModelItem* _item, const QString& _name,
+                                    const QColor& _color, bool _readOnly,
+                                    const QByteArray& _content)
+{
+    if (_item == nullptr) {
+        return;
+    }
+
+    const auto itemIndex = indexForItem(_item);
+    auto newVersion = _item->addVersion(_name, _color, _readOnly);
+    emit dataChanged(itemIndex, itemIndex);
+
+    emit documentAdded(newVersion->uuid(), _item->parent()->uuid(), newVersion->type(),
+                       newVersion->name(), _content);
+}
+
+void StructureModel::updateItemVersion(StructureModelItem* _item, int _versionIndex,
+                                       const QString& _name, const QColor& _color, bool _readOnly)
+{
+    if (_item == nullptr) {
+        return;
+    }
+
+    const auto itemIndex = indexForItem(_item);
+    auto version = _item->versions().at(_versionIndex);
+    version->setName(_name);
+    version->setColor(_color);
+    version->setReadOnly(_readOnly);
+    emit dataChanged(itemIndex, itemIndex);
+}
+
+void StructureModel::removeItemVersion(StructureModelItem* _item, int _versionIndex)
+{
+    if (_item == nullptr) {
+        return;
+    }
+
+    const auto itemIndex = indexForItem(_item);
+    _item->removeVersion(_versionIndex);
     emit dataChanged(itemIndex, itemIndex);
 }
 
@@ -822,18 +1165,31 @@ void StructureModel::initDocument()
     // Если документ пустой, создаём первоначальную структуру
     //
     if (document()->content().isEmpty()) {
+        d->isNewProject = true;
+
         addDocument(Domain::DocumentObjectType::Project);
         addDocument(Domain::DocumentObjectType::Characters);
         addDocument(Domain::DocumentObjectType::Locations);
+        addDocument(Domain::DocumentObjectType::Worlds);
+
+        //
+        // При необходимости добавим дополнительные элементы в первоначальную структуру
+        //
+        const auto projectType = static_cast<Domain::DocumentObjectType>(
+            settingsValue(DataStorageLayer::kProjectTypeKey).toInt());
+        if (projectType != Domain::DocumentObjectType::Undefined) {
+            addDocument(projectType);
+        }
+
         addDocument(Domain::DocumentObjectType::RecycleBin);
     }
     //
     // А если данные есть, то загрузим их из документа
     //
     else {
-        beginResetModel();
+        beginResetModelTransaction();
         d->buildModel(document());
-        endResetModel();
+        endResetModelTransaction();
     }
 }
 
@@ -843,11 +1199,11 @@ void StructureModel::clearDocument()
         return;
     }
 
-    emit beginRemoveRows({}, 0, d->rootItem->childCount() - 1);
+    beginRemoveRows({}, 0, d->rootItem->childCount() - 1);
     while (d->rootItem->childCount() > 0) {
         d->rootItem->removeItem(d->rootItem->childAt(0));
     }
-    emit endRemoveRows();
+    endRemoveRows();
 }
 
 QByteArray StructureModel::toXml() const
@@ -855,23 +1211,298 @@ QByteArray StructureModel::toXml() const
     return d->toXml(document());
 }
 
-QModelIndex StructureModel::indexForItem(StructureModelItem* _item) const
+ChangeCursor StructureModel::applyPatch(const QByteArray& _patch)
 {
-    if (_item == nullptr) {
+    Q_ASSERT(document());
+
+#ifdef XML_CHECKS
+    const auto newContent = dmpController().applyPatch(toXml(), _patch);
+    qDebug(QString("Before applying patch xml is\n\n%1\n\n").arg(toXml().constData()).toUtf8());
+    qDebug(QString("Patch is\n\n%1\n\n")
+               .arg(QByteArray::fromPercentEncoding(_patch).constData())
+               .toUtf8());
+#endif
+
+    //
+    // Определить область изменения в xml
+    //
+    auto changes = dmpController().changedXml(toXml(), _patch);
+    if (changes.first.xml.isEmpty() && changes.second.xml.isEmpty()) {
+        Log::warning("Patch don't lead to any changes");
         return {};
     }
 
-    int row = 0;
-    QModelIndex parent;
-    if (_item->hasParent()
-        && _item->parent()->hasParent()) {
-        row = _item->parent()->rowOfChild(_item);
-        parent = indexForItem(_item->parent());
-    } else {
-        row = d->rootItem->rowOfChild(_item);
+    changes.first.xml = xml::prepareXml(changes.first.xml);
+    changes.second.xml = xml::prepareXml(changes.second.xml);
+
+#ifdef XML_CHECKS
+    qDebug(QString("Xml data changes first item\n\n%1\n\n")
+               .arg(changes.first.xml.constData())
+               .toUtf8());
+    qDebug(QString("Xml data changes second item\n\n%1\n\n")
+               .arg(changes.second.xml.constData())
+               .toUtf8());
+#endif
+
+    //
+    // Считываем элементы из обоих изменений для дальнейшего определения необходимых изменений
+    //
+    auto readItems = [this](const QString& _xml) -> QVector<StructureModelItem*> {
+        QVector<StructureModelItem*> items;
+        QDomDocument domDocument;
+        domDocument.setContent(_xml);
+        auto documentNode = domDocument.firstChildElement(kDocumentKey);
+        auto itemNode = documentNode.firstChildElement();
+        while (!itemNode.isNull()) {
+            items.append(d->buildItem(itemNode));
+            itemNode = itemNode.nextSiblingElement();
+        }
+        return items;
+    };
+    const auto oldItems = readItems(changes.first.xml);
+    const auto newItems = readItems(changes.second.xml);
+
+    //
+    // Раскладываем элементы в плоские списки для сравнения
+    //
+    std::function<QVector<StructureModelItem*>(const QVector<StructureModelItem*>&)> makeItemsPlain;
+    makeItemsPlain = [&makeItemsPlain](const QVector<StructureModelItem*>& _items) {
+        QVector<StructureModelItem*> itemsPlain;
+        for (auto item : _items) {
+            itemsPlain.append(item);
+            for (int row = 0; row < item->childCount(); ++row) {
+                itemsPlain.append(makeItemsPlain({ item->childAt(row) }));
+            }
+        }
+        return itemsPlain;
+    };
+    auto oldItemsPlain = makeItemsPlain(oldItems);
+    Q_ASSERT(!oldItemsPlain.isEmpty());
+    auto newItemsPlain = makeItemsPlain(newItems);
+    Q_ASSERT(!newItemsPlain.isEmpty());
+
+    //
+    // Определим необходимые операции для применения изменения
+    //
+    const auto operations = edit_distance::editDistance(oldItemsPlain, newItemsPlain);
+    //
+    auto modelItem = itemForUuid(oldItemsPlain.constFirst()->uuid());
+    StructureModelItem* previousModelItem = nullptr;
+    //
+    std::function<StructureModelItem*(StructureModelItem*, bool)> findNextItemWithChildren;
+    findNextItemWithChildren
+        = [&findNextItemWithChildren](StructureModelItem* _item,
+                                      bool _searchInChildren) -> StructureModelItem* {
+        if (_item == nullptr) {
+            return nullptr;
+        }
+
+        if (_searchInChildren) {
+            //
+            // Если есть дети, идём в дочерний элемент
+            //
+            if (_item->hasChildren()) {
+                return _item->childAt(0);
+            }
+        }
+
+        //
+        // Если детей нет, идём в следующий
+        //
+
+        if (!_item->hasParent()) {
+            return nullptr;
+        }
+        auto parent = _item->parent();
+
+        auto itemIndex = parent->rowOfChild(_item);
+        if (itemIndex < 0 || itemIndex >= parent->childCount()) {
+            return nullptr;
+        }
+
+        //
+        // Не последний в родителе, берём следующий с этого же уровня
+        //
+        if (itemIndex < parent->childCount() - 1) {
+            return parent->childAt(itemIndex + 1);
+        }
+        //
+        // Последний в родителе, берём следующий с предыдущего уровня
+        //
+        else {
+            return findNextItemWithChildren(parent, false);
+        }
+    };
+    auto findNextItem = [&findNextItemWithChildren](StructureModelItem* _item) {
+        return findNextItemWithChildren(_item, true);
+    };
+    //
+    // И применяем их
+    //
+    for (const auto& operation : operations) {
+        //
+        // Собственно применяем операции
+        //
+        auto newItem = operation.value;
+        switch (operation.type) {
+        case edit_distance::OperationType::Skip: {
+            //
+            // При необходимости, корректируем положение элемента
+            //
+            if (newItem->parent() == nullptr) {
+                if (modelItem->parent() != d->rootItem) {
+                    while (previousModelItem->parent() != d->rootItem) {
+                        previousModelItem = previousModelItem->parent();
+                    }
+                    takeItem(modelItem);
+                    insertItem(modelItem, previousModelItem);
+                }
+            } else if (newItem->parent()->uuid() != modelItem->parent()->uuid()) {
+                if (newItem->parent()->uuid() == previousModelItem->uuid()) {
+                    moveItem(modelItem, previousModelItem);
+                } else {
+                    while (previousModelItem->parent() != d->rootItem
+                           && newItem->parent()->uuid() != previousModelItem->parent()->uuid()) {
+                        previousModelItem = previousModelItem->parent();
+                    }
+                    takeItem(modelItem);
+                    insertItem(modelItem, previousModelItem);
+                }
+            }
+
+            previousModelItem = modelItem;
+            modelItem = findNextItem(modelItem);
+            break;
+        }
+
+        case edit_distance::OperationType::Remove: {
+            //
+            // Выносим детей на предыдущий уровень
+            //
+            while (modelItem->hasChildren()) {
+                auto childItem = modelItem->childAt(modelItem->childCount() - 1);
+                takeItem(childItem);
+                insertItem(childItem, modelItem);
+            }
+            //
+            // ... и удаляем сам элемент
+            //
+            auto nextItem = findNextItem(modelItem);
+            removeItem(modelItem);
+
+            //
+            // Обновляем родителя, т.к. у него видмость зависит от наличия детей
+            //
+            if (previousModelItem->type() == Domain::DocumentObjectType::Characters
+                || previousModelItem->type() == Domain::DocumentObjectType::Locations
+                || previousModelItem->type() == Domain::DocumentObjectType::Worlds) {
+                updateItem(previousModelItem);
+            }
+
+            modelItem = nextItem;
+            break;
+        }
+
+        case edit_distance::OperationType::Insert: {
+            //
+            // Создаём новый элемент
+            //
+            auto itemToInsert = new StructureModelItem(*newItem);
+            //
+            // ... и вставляем в нужного родителя
+            //
+            if (newItem->parent() == nullptr) {
+                while (previousModelItem->parent() != d->rootItem) {
+                    previousModelItem = previousModelItem->parent();
+                }
+                insertItem(itemToInsert, previousModelItem);
+            } else {
+                if (newItem->parent()->uuid() == previousModelItem->uuid()) {
+                    prependItem(itemToInsert, previousModelItem);
+                } else {
+                    while (previousModelItem->parent() != d->rootItem
+                           && newItem->parent()->uuid() != previousModelItem->parent()->uuid()) {
+                        previousModelItem = previousModelItem->parent();
+                    }
+                    insertItem(itemToInsert, previousModelItem);
+                }
+            }
+
+            //
+            // Обновляем родителя, т.к. у него видмость зависит от наличия детей
+            //
+            if (previousModelItem->type() == Domain::DocumentObjectType::Characters
+                || previousModelItem->type() == Domain::DocumentObjectType::Locations
+                || previousModelItem->type() == Domain::DocumentObjectType::Worlds) {
+                updateItem(previousModelItem);
+            }
+
+            previousModelItem = itemToInsert;
+            break;
+        }
+
+        case edit_distance::OperationType::Replace: {
+            //
+            // Обновляем элемент
+            //
+            if (!modelItem->isEqual(newItem)) {
+                modelItem->copyFrom(newItem);
+                updateItem(modelItem);
+                //
+                // Выносим детей на предыдущий уровень, т.к. мог измениться их родитель
+                //
+                while (modelItem->hasChildren()) {
+                    auto childItem = modelItem->childAt(modelItem->childCount() - 1);
+                    takeItem(childItem);
+                    insertItem(childItem, modelItem);
+                }
+            }
+            //
+            // Корректируем положение элемента
+            //
+            if (newItem->parent() == nullptr) {
+                if (modelItem->parent() != d->rootItem) {
+                    while (previousModelItem->parent() != d->rootItem) {
+                        previousModelItem = previousModelItem->parent();
+                    }
+                    takeItem(modelItem);
+                    insertItem(modelItem, previousModelItem);
+                }
+            } else if (newItem->parent()->uuid() != modelItem->parent()->uuid()) {
+                if (newItem->parent()->uuid() == previousModelItem->uuid()) {
+                    moveItem(modelItem, previousModelItem);
+                } else {
+                    while (previousModelItem->parent() != d->rootItem
+                           && newItem->parent()->uuid() != previousModelItem->parent()->uuid()) {
+                        previousModelItem = previousModelItem->parent();
+                    }
+                    takeItem(modelItem);
+                    insertItem(modelItem, previousModelItem);
+                }
+            }
+
+            previousModelItem = modelItem;
+            modelItem = findNextItem(modelItem);
+            break;
+        }
+        }
     }
 
-    return index(row, 0, parent);
+    qDeleteAll(oldItems);
+    qDeleteAll(newItems);
+
+#ifdef XML_CHECKS
+    //
+    // Делаем проверку на соответствие обновлённой модели прямому наложению патча
+    //
+    if (newContent != toXml()) {
+        qDebug(QString("New content should be\n\n%1\n\n").arg(newContent.constData()).toUtf8());
+        qDebug(QString("New content is\n\n%1\n\n").arg(toXml().constData()).toUtf8());
+    }
+    Q_ASSERT(newContent == toXml());
+#endif
+
+    return {};
 }
 
 } // namespace BusinessLayer

@@ -2,14 +2,9 @@
 
 #include <ui/design_system/design_system.h>
 
+#include <QAbstractItemView>
 #include <QPainter>
 #include <QStyleOption>
-
-namespace {
-    qreal scaledValue(qreal _value) {
-        return _value * Ui::DesignSystem::scaleFactor();
-    }
-}
 
 
 ApplicationStyle::ApplicationStyle(QStyle* _style)
@@ -18,7 +13,8 @@ ApplicationStyle::ApplicationStyle(QStyle* _style)
 }
 
 QRect ApplicationStyle::subControlRect(QStyle::ComplexControl _complexControl,
-    const QStyleOptionComplex* _option, QStyle::SubControl _subControl, const QWidget* _widget) const
+                                       const QStyleOptionComplex* _option,
+                                       QStyle::SubControl _subControl, const QWidget* _widget) const
 {
     if (_complexControl == CC_ScrollBar
         && (_subControl == SC_ScrollBarAddLine || _subControl == SC_ScrollBarSubLine)) {
@@ -29,34 +25,37 @@ QRect ApplicationStyle::subControlRect(QStyle::ComplexControl _complexControl,
 }
 
 QStyle::SubControl ApplicationStyle::hitTestComplexControl(QStyle::ComplexControl _control,
-    const QStyleOptionComplex* _option, const QPoint& _pos, const QWidget* _widget) const
+                                                           const QStyleOptionComplex* _option,
+                                                           const QPoint& _pos,
+                                                           const QWidget* _widget) const
 {
-    const SubControl _subcontrol = QProxyStyle::hitTestComplexControl(_control, _option, _pos, _widget);
+    const SubControl _subcontrol
+        = QProxyStyle::hitTestComplexControl(_control, _option, _pos, _widget);
     if (_control == CC_ScrollBar
         && (_subcontrol == SC_ScrollBarAddLine || _subcontrol == SC_ScrollBarSubLine)) {
-            return SC_ScrollBarSlider;
+        return SC_ScrollBarSlider;
     }
     return _subcontrol;
 }
 
 int ApplicationStyle::pixelMetric(QStyle::PixelMetric _metric, const QStyleOption* _option,
-    const QWidget* _widget) const
+                                  const QWidget* _widget) const
 {
     switch (_metric) {
-        case PM_ScrollBarExtent: {
-            return 0;
-        }
-        case PM_ToolTipLabelFrameWidth: {
-            return static_cast<int>(Ui::DesignSystem::layout().px8());
-        }
-        default: {
-            return QProxyStyle::pixelMetric(_metric, _option, _widget);
-        }
+    case PM_ScrollBarExtent: {
+        return 0;
+    }
+    case PM_ToolTipLabelFrameWidth: {
+        return static_cast<int>(Ui::DesignSystem::layout().px8());
+    }
+    default: {
+        return QProxyStyle::pixelMetric(_metric, _option, _widget);
+    }
     }
 }
 
 void ApplicationStyle::drawPrimitive(QStyle::PrimitiveElement _element, const QStyleOption* _option,
-    QPainter* _painter, const QWidget* _widget) const
+                                     QPainter* _painter, const QWidget* _widget) const
 {
     //
     // Отрисовка индикатора вставки/перемещения элементов при драг&дропе
@@ -70,7 +69,7 @@ void ApplicationStyle::drawPrimitive(QStyle::PrimitiveElement _element, const QS
         // Кисть для рисования линий
         //
         QPen pen(indicatorColor);
-        pen.setWidthF(scaledValue(2.0));
+        pen.setWidthF(Ui::DesignSystem::layout().px(2.0));
         QBrush brush(indicatorColor);
 
         //
@@ -87,11 +86,13 @@ void ApplicationStyle::drawPrimitive(QStyle::PrimitiveElement _element, const QS
             // Рисуем вспомогательный треугольник внизу виджета
             //
             const qreal x = _widget->width() / 2.0;
-            const qreal y = _widget->height() - scaledValue(16.0);
+            const qreal y = _widget->height() - Ui::DesignSystem::layout().px(16.0);
             QPolygonF treangle;
             treangle << QPointF(x, y)
-                     << QPointF(x + scaledValue(7.0),  y + scaledValue(10.0))
-                     << QPointF(x - scaledValue(7.0),  y + scaledValue(10.0));
+                     << QPointF(x + Ui::DesignSystem::layout().px(7.0),
+                                y + Ui::DesignSystem::layout().px(10.0))
+                     << QPointF(x - Ui::DesignSystem::layout().px(7.0),
+                                y + Ui::DesignSystem::layout().px(10.0));
             _painter->drawPolygon(treangle);
         }
         //
@@ -101,16 +102,20 @@ void ApplicationStyle::drawPrimitive(QStyle::PrimitiveElement _element, const QS
             //
             // Рисуем линию между элементов
             //
-            _painter->drawLine(QPointF(_option->rect.topLeft().x() - scaledValue(10.0),
-                                       _option->rect.topLeft().y()),
-                               _option->rect.topRight());
+            _painter->drawLine(
+                QPointF(_option->rect.topLeft().x() - Ui::DesignSystem::layout().px(10.0),
+                        _option->rect.topLeft().y()),
+                _option->rect.topRight());
             //
             // Вспомогательный треугольник
             //
             QPolygonF treangle;
-            treangle <<  QPointF(_option->rect.topLeft().x() - scaledValue(10.0), _option->rect.topLeft().y() - scaledValue(4.0))
-                     << QPointF(_option->rect.topLeft().x() - scaledValue(5.0),  _option->rect.topLeft().y())
-                     << QPointF(_option->rect.topLeft().x() - scaledValue(10.0), _option->rect.topLeft().y() + scaledValue(4.0));
+            treangle << QPointF(_option->rect.topLeft().x() - Ui::DesignSystem::layout().px(10.0),
+                                _option->rect.topLeft().y() - Ui::DesignSystem::layout().px(4.0))
+                     << QPointF(_option->rect.topLeft().x() - Ui::DesignSystem::layout().px(5.0),
+                                _option->rect.topLeft().y())
+                     << QPointF(_option->rect.topLeft().x() - Ui::DesignSystem::layout().px(10.0),
+                                _option->rect.topLeft().y() + Ui::DesignSystem::layout().px(4.0));
             _painter->drawPolygon(treangle);
         }
         //
@@ -128,8 +133,9 @@ void ApplicationStyle::drawPrimitive(QStyle::PrimitiveElement _element, const QS
             // Расширим немного область, чтобы не перекрывать иконку
             //
             QRectF rect = _option->rect;
-            rect.setX(rect.topLeft().x() - scaledValue(4.0));
-            _painter->drawRoundedRect(rect, scaledValue(2.0), scaledValue(2.0));
+            rect.setX(rect.topLeft().x() - Ui::DesignSystem::layout().px(4.0));
+            _painter->drawRoundedRect(rect, Ui::DesignSystem::layout().px(2.0),
+                                      Ui::DesignSystem::layout().px(2.0));
         }
     }
     //
@@ -150,11 +156,26 @@ void ApplicationStyle::drawPrimitive(QStyle::PrimitiveElement _element, const QS
         //
         if (_option->state & State_Children) {
             //
+            // Если для элемент задан цвет фона используем его и для цвета фона индикатора
+            //
+            if (!_option->state.testFlag(State_Selected)
+                && !_option->state.testFlag(State_MouseOver)) {
+                const auto itemView = qobject_cast<const QAbstractItemView*>(_widget);
+                if (itemView != nullptr) {
+                    const auto index = itemView->indexAt(_option->rect.center());
+                    if (index.isValid() && index.data(Qt::BackgroundRole).isValid()) {
+                        _painter->fillRect(_option->rect,
+                                           index.data(Qt::BackgroundRole).value<QColor>());
+                    }
+                }
+            }
+
+            //
             // Кисть для рисования треугольника
             //
             auto indicatorColor(_option->state & State_Selected
-                                ? _widget->palette().highlightedText().color()
-                                : _widget->palette().text().color());
+                                    ? _widget->palette().highlightedText().color()
+                                    : _widget->palette().text().color());
             if (!(_option->state & State_Selected) && !(_option->state & State_MouseOver)) {
                 indicatorColor.setAlphaF(Ui::DesignSystem::inactiveTextOpacity());
             }
@@ -177,8 +198,7 @@ void ApplicationStyle::drawPrimitive(QStyle::PrimitiveElement _element, const QS
             // ... открытый
             //
             if (_option->state & QStyle::State_Open) {
-                triangle << QPointF(0.0, 0.0)
-                         << QPointF(-arrowHalfWidth, -arrowHeight)
+                triangle << QPointF(0.0, 0.0) << QPointF(-arrowHalfWidth, -arrowHeight)
                          << QPointF(arrowHalfWidth, -arrowHeight);
             }
             //
@@ -186,12 +206,10 @@ void ApplicationStyle::drawPrimitive(QStyle::PrimitiveElement _element, const QS
             //
             else {
                 if (QLocale().textDirection() == Qt::LeftToRight) {
-                    triangle << QPointF(0.0, 0.0)
-                             << QPointF(-arrowHeight, -arrowHalfWidth)
+                    triangle << QPointF(0.0, 0.0) << QPointF(-arrowHeight, -arrowHalfWidth)
                              << QPointF(-arrowHeight, arrowHalfWidth);
                 } else {
-                    triangle << QPointF(0.0, -arrowHalfWidth)
-                             << QPointF(0.0, arrowHalfWidth)
+                    triangle << QPointF(0.0, -arrowHalfWidth) << QPointF(0.0, arrowHalfWidth)
                              << QPointF(-arrowHeight, 0.0);
                 }
             }
@@ -200,7 +218,8 @@ void ApplicationStyle::drawPrimitive(QStyle::PrimitiveElement _element, const QS
             // Позиционируем
             //
             auto optionRectCenter = _option->rect.center();
-            optionRectCenter.setY(_option->rect.top() + Ui::DesignSystem::treeOneLineItem().height() / 2);
+            optionRectCenter.setY(_option->rect.top()
+                                  + Ui::DesignSystem::treeOneLineItem().height() / 2);
             const QPointF distance = optionRectCenter - triangle.boundingRect().center();
             triangle.translate(distance);
 
@@ -219,7 +238,7 @@ void ApplicationStyle::drawPrimitive(QStyle::PrimitiveElement _element, const QS
 }
 
 int ApplicationStyle::styleHint(QStyle::StyleHint _hint, const QStyleOption* _option,
-    const QWidget* _widget, QStyleHintReturn* _returnData) const
+                                const QWidget* _widget, QStyleHintReturn* _returnData) const
 {
     if (_hint == QStyle::SH_ToolTip_Mask) {
         if (auto mask = qstyleoption_cast<QStyleHintReturnMask*>(_returnData)) {
@@ -229,10 +248,10 @@ int ApplicationStyle::styleHint(QStyle::StyleHint _hint, const QStyleOption* _op
             //
             int x, y, w, h;
             _option->rect.adjusted(1, 1, -1, -1).getRect(&x, &y, &w, &h);
-            QRegion toolTipRegion(x + 4, y + 0, w - 4*2, h - 0*2);
-            toolTipRegion += QRegion(x + 0, y + 4, w - 0*2, h - 4*2);
-            toolTipRegion += QRegion(x + 2, y + 1, w - 2*2, h - 1*2);
-            toolTipRegion += QRegion(x + 1, y + 2, w - 1*2, h - 2*2);
+            QRegion toolTipRegion(x + 4, y + 0, w - 4 * 2, h - 0 * 2);
+            toolTipRegion += QRegion(x + 0, y + 4, w - 0 * 2, h - 4 * 2);
+            toolTipRegion += QRegion(x + 2, y + 1, w - 2 * 2, h - 1 * 2);
+            toolTipRegion += QRegion(x + 1, y + 2, w - 1 * 2, h - 2 * 2);
             mask->region = toolTipRegion;
         }
         return true;

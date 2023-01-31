@@ -15,8 +15,9 @@ public:
     ~ImageCropper() override;
 
     /**
-     * @brief Установить изображение для обрезки
+     * @brief Изображение для обрезки
      */
+    QPixmap image() const;
     void setImage(const QPixmap& _image);
 
     /**
@@ -44,6 +45,7 @@ protected:
     void mousePressEvent(QMouseEvent* _event) override;
     void mouseMoveEvent(QMouseEvent* _event) override;
     void mouseReleaseEvent(QMouseEvent* _event) override;
+    void mouseDoubleClickEvent(QMouseEvent* _event) override;
 
 private:
     class Implementation;

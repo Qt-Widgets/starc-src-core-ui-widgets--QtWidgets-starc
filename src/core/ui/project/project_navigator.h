@@ -5,8 +5,7 @@
 class QAbstractItemModel;
 
 
-namespace Ui
-{
+namespace Ui {
 
 /**
  * @brief Навигатор по структуре проекта
@@ -16,8 +15,22 @@ class ProjectNavigator : public StackWidget
     Q_OBJECT
 
 public:
+    /**
+     * @brief Типы кнопок навигатора
+     */
+    enum class ActionButton {
+        AddDocument,
+        EmptyRecycleBin,
+    };
+
+public:
     explicit ProjectNavigator(QWidget* _parent = nullptr);
     ~ProjectNavigator() override;
+
+    /**
+     * @brief Задать режим работы
+     */
+    void setReadOnly(bool _readOnly);
 
     /**
      * @brief Задать модель документов проекта
@@ -37,7 +50,7 @@ public:
     /**
      * @brief Восстановить состояние
      */
-    void restoreState(const QVariant& _state);
+    void restoreState(bool _isNewProject, const QVariant& _state);
 
     /**
      * @brief Выделить элемент с заданным индексом в дереве
@@ -59,6 +72,16 @@ public:
      */
     bool isProjectNavigatorShown() const;
 
+    /**
+     * @brief Показать кнопку заданного типа в нижней части навигатора
+     */
+    void showButton(ActionButton _type);
+
+    /**
+     * @brief Задать доступность кнопки действия в нижней части навигатора
+     */
+    void setButtonEnabled(bool _enabled);
+
 signals:
     /**
      * @brief Пользователь выбрал заданный элемент структуры
@@ -71,6 +94,11 @@ signals:
     void itemDoubleClicked(const QModelIndex& _index);
 
     /**
+     * @brief Пользователь хочет открыть навигацию по элементу
+     */
+    void itemNavigationRequested(const QModelIndex& _index);
+
+    /**
      * @brief Пользователь хочет открыть контекстное меню и поэтому нужно обновить контекстное меню
      */
     void contextMenuUpdateRequested(const QModelIndex& _index);
@@ -80,7 +108,17 @@ signals:
      */
     void addDocumentClicked();
 
+    /**
+     * @brief Нажата кнопка очистки корзины
+     */
+    void emptyRecycleBinClicked();
+
 protected:
+    /**
+     * @brief Отлавливаем события отображения тултипа для дерева документов
+     */
+    bool eventFilter(QObject* _watched, QEvent* _event) override;
+
     /**
      * @brief Обновить переводы
      */
@@ -96,4 +134,4 @@ private:
     QScopedPointer<Implementation> d;
 };
 
-}
+} // namespace Ui

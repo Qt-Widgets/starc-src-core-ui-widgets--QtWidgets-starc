@@ -6,16 +6,16 @@
 namespace BusinessLayer {
 class AbstractImageWrapper;
 class AbstractModel;
-}
+class StructureModel;
+} // namespace BusinessLayer
 
 namespace Domain {
 class DocumentObject;
 enum class DocumentObjectType;
-}
+} // namespace Domain
 
 
-namespace ManagementLayer
-{
+namespace ManagementLayer {
 
 /**
  * @brief Фасад для работы с моделями документов проекта
@@ -25,7 +25,9 @@ class ProjectModelsFacade : public QObject
     Q_OBJECT
 
 public:
-    explicit ProjectModelsFacade(BusinessLayer::AbstractImageWrapper* _imageWrapper, QObject* _parent = nullptr);
+    explicit ProjectModelsFacade(BusinessLayer::StructureModel* _projectStructureModel,
+                                 BusinessLayer::AbstractImageWrapper* _imageWrapper,
+                                 QObject* _parent = nullptr);
     ~ProjectModelsFacade() override;
 
     /**
@@ -36,9 +38,14 @@ public:
     /**
      * @brief Получить модель для заданного документа
      */
-    BusinessLayer::AbstractModel* modelFor(const QUuid& _uuid, const QUuid& _parentUuid = {});
+    BusinessLayer::AbstractModel* modelFor(const QUuid& _uuid);
     BusinessLayer::AbstractModel* modelFor(Domain::DocumentObjectType _type);
-    BusinessLayer::AbstractModel* modelFor(Domain::DocumentObject* _document, const QUuid& _parentUuid = {});
+    BusinessLayer::AbstractModel* modelFor(Domain::DocumentObject* _document);
+
+    /**
+     * @brief Получить список всех моделей заданного типа
+     */
+    QVector<BusinessLayer::AbstractModel*> modelsFor(Domain::DocumentObjectType _type);
 
     /**
      * @brief Удалить модель для заданного документа
@@ -48,7 +55,13 @@ public:
     /**
      * @brief Получить список загруженных моделей документов
      */
-    QVector<BusinessLayer::AbstractModel*> models()  const;
+    QVector<BusinessLayer::AbstractModel*> loadedModels() const;
+    QVector<BusinessLayer::AbstractModel*> loadedModelsFor(Domain::DocumentObjectType _type) const;
+
+    /**
+     * @brief Получить список загруженных документов
+     */
+    QVector<Domain::DocumentObject*> loadedDocuments() const;
 
 signals:
     /**
@@ -57,14 +70,25 @@ signals:
     void modelNameChanged(BusinessLayer::AbstractModel* _model, const QString& _name);
 
     /**
+     * @brief Изменился цвет модели
+     */
+    void modelColorChanged(BusinessLayer::AbstractModel* _model, const QColor& _color);
+
+    /**
      * @brief Изменился контент модели
      */
-    void modelContentChanged(BusinessLayer::AbstractModel* _model, const QByteArray& _undo, const QByteArray& _redo);
+    void modelContentChanged(BusinessLayer::AbstractModel* _model, const QByteArray& _undo,
+                             const QByteArray& _redo);
 
     /**
      * @brief Запрос на отмену последнего действия в модели
      */
     void modelUndoRequested(BusinessLayer::AbstractModel* _model, int _undoStep);
+
+    /**
+     * @brief Запрос на удаление модели
+     */
+    void modelRemoveRequested(BusinessLayer::AbstractModel* _model);
 
     /**
      * @brief Изменилось название проекта
@@ -82,9 +106,68 @@ signals:
     void projectCoverChanged(const QPixmap& _cover);
 
     /**
+     * @brief Пользователь хочет изменить список соавторов в проекте
+     */
+    void projectCollaboratorInviteRequested(const QString& _email, const QColor& _color, int _role);
+    void projectCollaboratorUpdateRequested(const QString& _email, const QColor& _color, int _role);
+    void projectCollaboratorRemoveRequested(const QString& _email);
+
+    /**
+     * @brief Сменилась видимость элемента сценария
+     */
+    /** @{ */
+    void screenplayTitlePageVisibilityChanged(BusinessLayer::AbstractModel* _model, bool _visible);
+    void screenplaySynopsisVisibilityChanged(BusinessLayer::AbstractModel* _model, bool _visible);
+    void screenplayTreatmentVisibilityChanged(BusinessLayer::AbstractModel* _model, bool _visible);
+    void screenplayTextVisibilityChanged(BusinessLayer::AbstractModel* _model, bool _visible);
+    void screenplayStatisticsVisibilityChanged(BusinessLayer::AbstractModel* _model, bool _visible);
+    /** @} */
+
+    /**
+     * @brief Сменилась видимость элемента комикса
+     */
+    /** @{ */
+    void comicBookTitlePageVisibilityChanged(BusinessLayer::AbstractModel* _model, bool _visible);
+    void comicBookSynopsisVisibilityChanged(BusinessLayer::AbstractModel* _model, bool _visible);
+    void comicBookTextVisibilityChanged(BusinessLayer::AbstractModel* _model, bool _visible);
+    void comicBookStatisticsVisibilityChanged(BusinessLayer::AbstractModel* _model, bool _visible);
+    /** @} */
+
+    /**
+     * @brief Сменилась видимость элемента аудиопостановки
+     */
+    /** @{ */
+    void audioplayTitlePageVisibilityChanged(BusinessLayer::AbstractModel* _model, bool _visible);
+    void audioplaySynopsisVisibilityChanged(BusinessLayer::AbstractModel* _model, bool _visible);
+    void audioplayTextVisibilityChanged(BusinessLayer::AbstractModel* _model, bool _visible);
+    void audioplayStatisticsVisibilityChanged(BusinessLayer::AbstractModel* _model, bool _visible);
+    /** @} */
+
+    /**
+     * @brief Сменилась видимость элемента аудиопостановки
+     */
+    /** @{ */
+    void stageplayTitlePageVisibilityChanged(BusinessLayer::AbstractModel* _model, bool _visible);
+    void stageplaySynopsisVisibilityChanged(BusinessLayer::AbstractModel* _model, bool _visible);
+    void stageplayTextVisibilityChanged(BusinessLayer::AbstractModel* _model, bool _visible);
+    void stageplayStatisticsVisibilityChanged(BusinessLayer::AbstractModel* _model, bool _visible);
+    /** @} */
+
+    /**
      * @brief Необходимо создать персонажа с заданным именем
      */
     void createCharacterRequested(const QString& _name, const QByteArray& _content);
+
+    /**
+     * @brief Изменилось имя персонажа
+     */
+    void characterNameChanged(BusinessLayer::AbstractModel* _character, const QString& _oldName,
+                              const QString& _newName);
+
+    /**
+     * @brief Запрос на обновление списка всех реплик персонажа
+     */
+    void characterDialoguesUpdateRequested(BusinessLayer::AbstractModel* _model);
 
     /**
      * @brief Неоходимо создать локацию с заданным именем
@@ -92,15 +175,20 @@ signals:
     void createLocationRequested(const QString& _name, const QByteArray& _content);
 
     /**
-     * @brief Сменилась видимость элемента сценария
+     * @brief Изменилось название локации
      */
-    /** @{ */
-    void screenplayTitlePageVisibilityChanged(BusinessLayer::AbstractModel* _screenplayModel, bool _visible);
-    void screenplaySynopsisVisibilityChanged(BusinessLayer::AbstractModel* _screenplayModel, bool _visible);
-    void screenplayTreatmentVisibilityChanged(BusinessLayer::AbstractModel* _screenplayModel, bool _visible);
-    void screenplayTextVisibilityChanged(BusinessLayer::AbstractModel* _screenplayModel, bool _visible);
-    void screenplayStatisticsVisibilityChanged(BusinessLayer::AbstractModel* _screenplayModel, bool _visible);
-    /** @} */
+    void locationNameChanged(BusinessLayer::AbstractModel* _location, const QString& _oldName,
+                             const QString& _newName);
+
+    /**
+     * @brief Неоходимо создать мир с заданным именем
+     */
+    void createWorldRequested(const QString& _name, const QByteArray& _content);
+
+    /**
+     * @brief Необходимо очистить корзинку
+     */
+    void emptyRecycleBinRequested();
 
 private:
     class Implementation;

@@ -1,104 +1,82 @@
 #include "login_dialog.h"
 
 #include <ui/design_system/design_system.h>
-
 #include <ui/widgets/button/button.h>
+#include <ui/widgets/label/label.h>
 #include <ui/widgets/text_field/text_field.h>
-
 #include <utils/tools/debouncer.h>
-
 #include <utils/validators/email_validator.h>
 
 #include <QEvent>
 #include <QGridLayout>
 
-namespace Ui
-{
+namespace Ui {
 
 class LoginDialog::Implementation
 {
 public:
     explicit Implementation(QWidget* _parent);
 
-    void checkEmail();
+    /**
+     * @brief Установить текст лейбла с информацией о коде подтверждения
+     *        в зависимости от того истёк ли срок годности кода
+     */
+    void updateConfirmationCodeInfo(bool _expired = false);
 
 
-    Debouncer checkEmailDebouncer{500};
-    Debouncer notifyEmailDebouncer{300};
-
+    Body1Label* description = nullptr;
     TextField* email = nullptr;
-    TextField* password = nullptr;
-    TextField* registrationConfirmationCode = nullptr;
-    TextField* restorePasswordConfirmationCode = nullptr;
+    Body1Label* confirmationCodeSendedInfo = nullptr;
+    TextField* confirmationCode = nullptr;
+    QTimer confirmationCodeExpirationTimer;
 
     QHBoxLayout* buttonsLayout = nullptr;
-    Button* registrationButton = nullptr;
-    Button* restorePasswordButton = nullptr;
-    Button* changePasswordButton = nullptr;
-    Button* loginButton = nullptr;
+    Button* signInButton = nullptr;
+    Button* resendCodeButton = nullptr;
     Button* cancelButton = nullptr;
 };
 
 LoginDialog::Implementation::Implementation(QWidget* _parent)
-    : email(new TextField(_parent)),
-      password(new TextField(_parent)),
-      registrationConfirmationCode(new TextField(_parent)),
-      restorePasswordConfirmationCode(new TextField(_parent)),
-      buttonsLayout(new QHBoxLayout),
-      registrationButton(new Button(_parent)),
-      restorePasswordButton(new Button(_parent)),
-      changePasswordButton(new Button(_parent)),
-      loginButton(new Button(_parent)),
-      cancelButton(new Button(_parent))
+    : description(new Body1Label(_parent))
+    , email(new TextField(_parent))
+    , confirmationCodeSendedInfo(new Body1Label(_parent))
+    , confirmationCode(new TextField(_parent))
+    , buttonsLayout(new QHBoxLayout)
+    , signInButton(new Button(_parent))
+    , resendCodeButton(new Button(_parent))
+    , cancelButton(new Button(_parent))
 {
+    email->setCapitalizeWords(false);
+    email->setSpellCheckPolicy(SpellCheckPolicy::Manual);
     email->setTabChangesFocus(true);
 
-    password->setTabChangesFocus(true);
-    password->setPasswordModeEnabled(true);
-    password->setTrailingIcon(u8"\U000f06d1");
-
-    registrationConfirmationCode->setTabChangesFocus(true);
-    restorePasswordConfirmationCode->setTabChangesFocus(true);
+    confirmationCode->setSpellCheckPolicy(SpellCheckPolicy::Manual);
+    confirmationCode->setTabChangesFocus(true);
 
     buttonsLayout->setContentsMargins({});
     buttonsLayout->setSpacing(0);
     buttonsLayout->addStretch();
-    buttonsLayout->addWidget(registrationButton);
-    buttonsLayout->addWidget(restorePasswordButton);
-    buttonsLayout->addWidget(changePasswordButton);
-    buttonsLayout->addWidget(loginButton);
     buttonsLayout->addWidget(cancelButton);
+    buttonsLayout->addWidget(resendCodeButton);
+    buttonsLayout->addWidget(signInButton);
 
-    registrationConfirmationCode->hide();
-    restorePasswordConfirmationCode->hide();
-    restorePasswordButton->hide();
-    changePasswordButton->hide();
-    registrationButton->hide();
-    loginButton->hide();
+    confirmationCodeSendedInfo->hide();
+    confirmationCode->hide();
+    signInButton->hide();
+    resendCodeButton->hide();
+
+    confirmationCodeExpirationTimer.setSingleShot(true);
+    confirmationCodeExpirationTimer.setInterval(std::chrono::minutes{ 10 });
 }
 
-void LoginDialog::Implementation::checkEmail()
+void LoginDialog::Implementation::updateConfirmationCodeInfo(bool _expired)
 {
-    auto resetState = [this] {
-        notifyEmailDebouncer.abortWork();
-        registrationButton->hide();
-        loginButton->hide();
-    };
-
-    if (email->text().isEmpty()) {
-        email->setError({});
-        resetState();
-        return;
+    if (_expired) {
+        confirmationCodeSendedInfo->setText(tr("The confirmation code we've sent expired."));
+    } else {
+        confirmationCodeSendedInfo->setText(tr(
+            "We've sent a confirmation code to the e-mail above, please enter it here to verify"));
     }
-
-    if (!EmailValidator::isValid(email->text())) {
-        email->setError(tr("Email invalid"));
-        resetState();
-        return;
-    }
-
-    email->setError({});
-    notifyEmailDebouncer.orderWork();
 }
 
 
@@ -106,34 +84,75 @@ void LoginDialog::Implementation::checkEmail()
 
 
 LoginDialog::LoginDialog(QWidget* _parent)
-    : AbstractDialog(_parent),
-      d(new Implementation(this))
+    : AbstractDialog(_parent)
+    , d(new Implementation(this))
 {
-    d->cancelButton->installEventFilter(this);
+    setAcceptButton(d->signInButton);
+    setRejectButton(d->cancelButton);
 
-    contentsLayout()->addWidget(d->email, 0, 0);
-    contentsLayout()->addWidget(d->restorePasswordConfirmationCode, 1, 0);
-    contentsLayout()->addWidget(d->password, 2, 0);
-    contentsLayout()->addWidget(d->registrationConfirmationCode, 3, 0);
-    contentsLayout()->addLayout(d->buttonsLayout, 4, 0);
+    int row = 0;
+    contentsLayout()->addWidget(d->description, row++, 0);
+    contentsLayout()->addWidget(d->email, row++, 0);
+    contentsLayout()->addWidget(d->confirmationCodeSendedInfo, row++, 0);
+    contentsLayout()->addWidget(d->confirmationCode, row++, 0);
+    contentsLayout()->setRowStretch(row++, 1);
+    contentsLayout()->addLayout(d->buttonsLayout, row++, 0);
 
-    connect(d->email, &TextField::textChanged, &d->checkEmailDebouncer, &Debouncer::orderWork);
-    connect(&d->checkEmailDebouncer, &Debouncer::gotWork, this, [this] { d->checkEmail(); });
-    connect(&d->notifyEmailDebouncer, &Debouncer::gotWork, this, &LoginDialog::emailEntered);
-    connect(d->password, &TextField::trailingIconPressed, d->password, [password = d->password] {
-        password->setPasswordModeEnabled(!password->isPasswordModeEnabled());
-        password->setTrailingIcon(password->isPasswordModeEnabled() ? u8"\U000f06d1" : u8"\U000f06d0");
+    connect(d->email, &TextField::textChanged, this, [this] {
+        d->email->setError({});
+        d->signInButton->setVisible(EmailValidator::isValid(d->email->text()));
+        showEmailStep();
     });
-    connect(d->registrationConfirmationCode, &TextField::textChanged, this, &LoginDialog::registrationConfirmationCodeEntered);
-    connect(d->restorePasswordConfirmationCode, &TextField::textChanged, this, &LoginDialog::passwordRestoringConfirmationCodeEntered);
-    connect(d->restorePasswordButton, &Button::clicked, this, &LoginDialog::restorePasswordRequested);
-    connect(d->changePasswordButton, &Button::clicked, this, &LoginDialog::changePasswordRequested);
-    connect(d->registrationButton, &Button::clicked, this, &LoginDialog::registrationRequested);
-    connect(d->loginButton, &Button::clicked, this, &LoginDialog::loginRequested);
-    connect(d->cancelButton, &Button::clicked, this, &LoginDialog::canceled);
+    connect(d->confirmationCode, &TextField::textChanged, this, [this] {
+        const auto code = d->confirmationCode->text();
+        if (code.isEmpty()) {
+            return;
+        }
 
-    updateTranslations();
-    designSystemChangeEvent(nullptr);
+        emit confirmationCodeChanged(code);
+    });
+    connect(&d->confirmationCodeExpirationTimer, &QTimer::timeout, this, [this] {
+        const bool expired = true;
+        d->updateConfirmationCodeInfo(expired);
+        d->resendCodeButton->show();
+        d->resendCodeButton->setFocus();
+        d->confirmationCode->hide();
+    });
+    connect(d->signInButton, &Button::clicked, this, [this] {
+        d->confirmationCodeSendedInfo->hide();
+        d->confirmationCode->hide();
+
+        if (!EmailValidator::isValid(d->email->text())) {
+            d->email->setError(tr("Email invalid"));
+            return;
+        }
+
+        showConfirmationCodeStep();
+
+        emit signInPressed();
+    });
+    connect(d->resendCodeButton, &Button::clicked, this, [this] {
+        d->updateConfirmationCodeInfo();
+
+        showConfirmationCodeStep();
+
+        emit signInPressed();
+    });
+    connect(d->cancelButton, &Button::clicked, this, &LoginDialog::cancelPressed);
+}
+
+LoginDialog::~LoginDialog() = default;
+
+void LoginDialog::showEmailStep()
+{
+    d->confirmationCode->clear();
+    d->confirmationCodeSendedInfo->hide();
+    d->confirmationCode->hide();
+    d->resendCodeButton->hide();
+
+    if (isVisible()) {
+        d->email->setFocus();
+    }
 }
 
 QString LoginDialog::email() const
@@ -141,85 +160,24 @@ QString LoginDialog::email() const
     return d->email->text();
 }
 
-QString LoginDialog::password() const
+void LoginDialog::showConfirmationCodeStep()
 {
-    return d->password->text();
+    d->confirmationCodeSendedInfo->show();
+    d->confirmationCode->clear();
+    d->confirmationCode->setError({});
+    d->confirmationCode->show();
+    d->signInButton->hide();
+    d->resendCodeButton->hide();
+
+    d->confirmationCode->setFocus();
+
+    d->confirmationCodeExpirationTimer.start();
 }
 
-QString LoginDialog::registractionConfirmationCode() const
+QString LoginDialog::confirmationCode() const
 {
-    return d->registrationConfirmationCode->text();
+    return d->confirmationCode->text();
 }
-
-QString LoginDialog::restorePasswordConfirmationCode() const
-{
-    return d->restorePasswordConfirmationCode->text();
-}
-
-void LoginDialog::showRegistrationButton()
-{
-    d->restorePasswordButton->hide();
-    d->loginButton->hide();
-    d->registrationButton->show();
-}
-
-void LoginDialog::showRegistrationConfirmationCodeField()
-{
-    d->registrationConfirmationCode->show();
-    d->registrationConfirmationCode->setFocus();
-
-    d->email->setEnabled(false);
-    d->password->setEnabled(false);
-    d->registrationButton->setEnabled(false);
-}
-
-void LoginDialog::setRegistrationConfirmationError(const QString& _error)
-{
-    d->registrationConfirmationCode->setError(_error);
-    d->registrationConfirmationCode->setFocus();
-}
-
-void LoginDialog::showLoginButtons()
-{
-    d->registrationButton->hide();
-    d->restorePasswordButton->show();
-    d->loginButton->show();
-}
-
-void LoginDialog::showRestorePasswordConfirmationCodeField()
-{
-    d->password->hide();
-    d->restorePasswordConfirmationCode->show();
-    d->restorePasswordConfirmationCode->setFocus();
-    d->restorePasswordButton->hide();
-    d->loginButton->hide();
-
-    d->email->setEnabled(false);
-}
-
-void LoginDialog::setRestorePasswordConfirmationError(const QString& _error)
-{
-    d->restorePasswordConfirmationCode->setError(_error);
-    d->restorePasswordConfirmationCode->setFocus();
-}
-
-void LoginDialog::showChangePasswordFieldAndButton()
-{
-    d->password->setLabel(tr("New password"));
-    d->password->show();
-    d->password->setFocus();
-    d->changePasswordButton->show();
-
-    d->restorePasswordConfirmationCode->setEnabled(false);
-}
-
-void LoginDialog::setPasswordError(const QString& _error)
-{
-    d->password->setError(_error);
-    d->password->setFocus();
-}
-
-LoginDialog::~LoginDialog() = default;
 
 QWidget* LoginDialog::focusedWidgetAfterShow() const
 {
@@ -235,14 +193,12 @@ void LoginDialog::updateTranslations()
 {
     setTitle(tr("Get into your account"));
 
+    d->description->setText(tr("Sign in to get access to the extended free and pro features"));
     d->email->setLabel(tr("Email"));
-    d->password->setLabel(tr("Password"));
-    d->registrationConfirmationCode->setLabel(tr("Confirmation code"));
-    d->restorePasswordConfirmationCode->setLabel(tr("Confirmation code"));
-    d->registrationButton->setText(tr("Sign up"));
-    d->restorePasswordButton->setText(tr("Restore password"));
-    d->changePasswordButton->setText(tr("Change password"));
-    d->loginButton->setText(tr("Sign in"));
+    d->updateConfirmationCodeInfo();
+    d->confirmationCode->setLabel(tr("Confirmation code"));
+    d->signInButton->setText(tr("Sign in"));
+    d->resendCodeButton->setText(tr("Send code again"));
     d->cancelButton->setText(tr("Cancel"));
 }
 
@@ -250,33 +206,34 @@ void LoginDialog::designSystemChangeEvent(DesignSystemChangeEvent* _event)
 {
     AbstractDialog::designSystemChangeEvent(_event);
 
-    for (auto button : { d->registrationButton,
-                         d->restorePasswordButton,
-                         d->changePasswordButton,
-                         d->loginButton,
-                         d->cancelButton }) {
-        button->setBackgroundColor(Ui::DesignSystem::color().secondary());
-        button->setTextColor(Ui::DesignSystem::color().secondary());
+    setContentFixedWidth(Ui::DesignSystem::dialog().minimumWidth());
+
+    for (auto label : { d->description, d->confirmationCodeSendedInfo }) {
+        label->setBackgroundColor(Ui::DesignSystem::color().background());
+        label->setTextColor(Ui::DesignSystem::color().onBackground());
+    }
+    auto labelContentMargins = Ui::DesignSystem::label().margins().toMargins();
+    labelContentMargins.setTop(0);
+    labelContentMargins.setBottom(Ui::DesignSystem::layout().px12());
+    d->description->setContentsMargins(labelContentMargins);
+    labelContentMargins.setTop(Ui::DesignSystem::layout().px12());
+    d->confirmationCodeSendedInfo->setContentsMargins(labelContentMargins);
+
+    for (auto textField : { d->email, d->confirmationCode }) {
+        textField->setBackgroundColor(Ui::DesignSystem::color().onBackground());
+        textField->setTextColor(Ui::DesignSystem::color().onBackground());
+    }
+
+    for (auto button : { d->signInButton, d->resendCodeButton, d->cancelButton }) {
+        button->setBackgroundColor(Ui::DesignSystem::color().accent());
+        button->setTextColor(Ui::DesignSystem::color().accent());
     }
 
     contentsLayout()->setSpacing(static_cast<int>(Ui::DesignSystem::layout().px8()));
-    d->buttonsLayout->setContentsMargins(QMarginsF(Ui::DesignSystem::layout().px12(),
-                                                   Ui::DesignSystem::layout().px12(),
-                                                   Ui::DesignSystem::layout().px16(),
-                                                   Ui::DesignSystem::layout().px8()).toMargins());
+    d->buttonsLayout->setContentsMargins(
+        QMarginsF(Ui::DesignSystem::layout().px12(), Ui::DesignSystem::layout().px12(),
+                  Ui::DesignSystem::layout().px16(), Ui::DesignSystem::layout().px16())
+            .toMargins());
 }
 
-bool LoginDialog::eventFilter(QObject* _watched, QEvent* _event)
-{
-    //
-    // Зацикливаем фокус, чтобы он всегда оставался внутри диалога
-    //
-    if (_watched == d->cancelButton
-        && _event->type() == QEvent::FocusOut) {
-        d->email->setFocus();
-    }
-
-    return AbstractDialog::eventFilter(_watched, _event);
-}
-
-}
+} // namespace Ui

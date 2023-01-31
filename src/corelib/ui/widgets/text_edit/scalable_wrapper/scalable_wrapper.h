@@ -1,8 +1,8 @@
 #pragma once
 
-#include <corelib_global.h>
-
 #include <QGraphicsView>
+
+#include <corelib_global.h>
 
 class QGestureEvent;
 class PageTextEdit;
@@ -49,12 +49,12 @@ signals:
     /**
      * @brief Изменился коэффициент масштабирования
      */
-    void zoomRangeChanged(qreal _zoomRange) const;
+    void zoomRangeChanged(qreal _zoomRange);
 
     /**
      * @brief Сменилась позиция курсора оборачиваемого редактора текста
      */
-    void cursorPositionChanged() const;
+    void cursorPositionChanged();
 
 protected:
     /**

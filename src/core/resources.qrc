@@ -1,27 +1,7 @@
 <RCC>
-    <qresource prefix="/fonts">
-        <file alias="materialdesignicons">resources/fonts/materialdesignicons-webfont.ttf</file>
-        <file alias="roboto-black">resources/fonts/roboto-black.ttf</file>
-        <file alias="roboto-bold">resources/fonts/roboto-bold.ttf</file>
-        <file alias="roboto-medium">resources/fonts/roboto-medium.ttf</file>
-        <file alias="roboto-regular">resources/fonts/roboto-regular.ttf</file>
-        <file alias="roboto-thin">resources/fonts/roboto-thin.ttf</file>
-        <file alias="courier-prime-bold-italic">resources/fonts/courier-prime-bold-italic.ttf</file>
-        <file alias="courier-prime-bold">resources/fonts/courier-prime-bold.ttf</file>
-        <file alias="courier-prime-italic">resources/fonts/courier-prime-italic.ttf</file>
-        <file alias="courier-prime">resources/fonts/courier-prime.ttf</file>
-        <file alias="noto-sans-bold">resources/fonts/noto-sans-bold.ttf</file>
-        <file alias="noto-sans-bold-italic">resources/fonts/noto-sans-bold-italic.ttf</file>
-        <file alias="noto-sans-italic">resources/fonts/noto-sans-italic.ttf</file>
-        <file alias="noto-sans">resources/fonts/noto-sans-regular.ttf</file>
-        <file alias="courier-new">resources/fonts/courier-new.ttf</file>
-        <file alias="courier-new-bold">resources/fonts/courier-new-bold.ttf</file>
-        <file alias="courier-new-bold-italic">resources/fonts/courier-new-bold-italic.ttf</file>
-        <file alias="courier-new-italic">resources/fonts/courier-new-italic.ttf</file>
-    </qresource>
     <qresource prefix="/images">
         <file alias="movie-poster">resources/images/movie-poster.jpg</file>
-        <file alias="default-avatar">resources/images/default-avatar.png</file>
+        <file alias="logo">resources/images/logo.png</file>
     </qresource>
     <qresource prefix="/audio">
         <file alias="backspace">resources/audio/backspace.wav</file>
@@ -31,5 +11,8 @@
         <file alias="key-04">resources/audio/key-04.wav</file>
         <file alias="return">resources/audio/return.wav</file>
         <file alias="space">resources/audio/space.wav</file>
+    </qresource>
+    <qresource prefix="/data">
+        <file alias="names_database">resources/data/names_database</file>
     </qresource>
 </RCC>
